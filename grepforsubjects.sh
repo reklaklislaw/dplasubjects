@@ -6,7 +6,7 @@ infile=$1
 outfile=$2
 
 #lists
-r1="(\"subject\":\[[^]]*\][^,^\}]*|"
+r1="(\"subject\":\[.+?(?=\]\},)[\]]|"
 
 #strings
 r2="\"subject\":\"[^\"]*\"[^,^\}]*)"
