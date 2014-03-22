@@ -6,11 +6,11 @@ infile=$1
 outfile=$2
 
 echo "getting total subject field count..."
-total=$(LC_ALL=C grep -o -P "\"subject\":" $infile | wc -l)
+total=$(LC_ALL=C zgrep -o -P "\"subject\":" $infile | wc -l)
 echo "total number of subject fields: $total" 
 
 echo "getting empty subject field count..."
-empty=$(LC_ALL=C grep -o -P "\"subject\":(\[\]|null|\[null,\]*)" $infile | wc -l)
+empty=$(LC_ALL=C zgrep -o -P "\"subject\":(\[\]|null|\[null,\]*)" $infile | wc -l)
 echo "total empty: $empty"
 
 echo "getting subject lists..."
@@ -22,7 +22,7 @@ l3="\[\{.+?\}(?=([\}]{3}))\})"
 
 listregex=$l0$l1$l2$l3
 
-lists=$(LC_ALL=C grep -o -P $listregex $infile)
+lists=$(LC_ALL=C zgrep -o -P $listregex $infile)
 if [ -z "$lists"  ]
 then
     list_count=0
@@ -40,7 +40,7 @@ d2="\{\".+?(?=\},)\})"
 
 dictregex=$d0$d1$d2
 
-dicts=$(LC_ALL=C grep -o -P $dictregex $infile)
+dicts=$(LC_ALL=C zgrep -o -P $dictregex $infile)
 if [ -z "$dicts"  ]
 then
     dict_count=0
@@ -51,7 +51,7 @@ echo "total dicts: $dict_count"
 
 
 echo "getting subject strings..."
-strings=$(LC_ALL=C grep -o -P "\"subject\":\"[^\"]*\"[^,^\}]*" $infile)
+strings=$(LC_ALL=C zgrep -o -P "\"subject\":\"[^\"]*\"[^,^\}]*" $infile)
 if [ -z "$strings"  ]
 then
     string_count=0
