@@ -1,5 +1,5 @@
 #!/bin/bash
-# Takes a dpla gzip as input, greps for subject entries, formats as json
+# Takes a dpla gzip as input, greps for subject entries,
 # and writes out a file.
 
 infile=$1
@@ -12,6 +12,7 @@ echo "total number of subject fields: $total"
 echo "getting empty subject field count..."
 empty=$(LC_ALL=C zgrep -o -P "\"subject\":(\[\]|null|\[null,\]*)" $infile | wc -l)
 echo "total empty: $empty"
+
 
 echo "getting subject lists..."
 
@@ -73,19 +74,12 @@ then
     fi
     if [ -n "$dicts" ]
     then
-	echo "$dicts" > $outfile
+	echo "$dicts" >> $outfile
     fi
     if [ -n "$strings" ]
     then
 	echo "$strings" >> $outfile
     fi
-    echo "formatting..."
-    sed -i 's/"subject":/{"subject":/g' $outfile
-    sed -i 's/.$/&},/g' $outfile
-    sed -i '1i[' $outfile
-    sed -i '$s/.$/]/g' $outfile
-    echo 'verifying json'
-    jsonlint $outfile
 else
     echo "FAILED TO MATCH ALL SUBJECTS... matched: $matched   total: $total" 
 fi
