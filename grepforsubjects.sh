@@ -36,10 +36,8 @@ echo "total lists: $list_count"
 echo "getting subject dicts..."
 
 d0="\"subject\":("
-d1="(\{.+?((?=(\]\}))(\]\}\}|\]\})|(?=\}\})\}))|"
-d2="\{\".+?(?=\},)\})"
-
-dictregex=$d0$d1$d2
+d1="\{\".+?((?=[\}]{4})\}\}|(?=[\}]{3})\}|\](?=[\}]{2})\}|\}))"
+dictregex=$d0$d1
 
 dicts=$(LC_ALL=C zgrep -o -P $dictregex $infile)
 if [ -z "$dicts"  ]
