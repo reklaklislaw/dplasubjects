@@ -6,7 +6,7 @@ infile=$1
 
 echo "formatting..."
 sed -i 's/"subject":/{"subject":/g' $infile
-sed -i 's/.$/&},/g' $infile
+sed -i 's/.$/&},/' $infile
 sed -i '1i[' $infile
 sed -i '$s/.$/]/g' $infile
 #echo 'verifying json'
