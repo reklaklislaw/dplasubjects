@@ -7,6 +7,7 @@
 #define NOT_FOUND patlen
 #define max(a, b) ((a < b) ? b : a)
 
+char** get_matches(char *string, int stringlen, int *m_pos, int m_count);
  
 // delta1 table: delta1[c] contains the distance between the last
 // character of pat and the rightmost occurrence of c in pat.
@@ -210,9 +211,7 @@ void find_subjects(FILE *in_file)
 
       if (lst_c > 0)
 	{
-	  char **list_matches = malloc(sizeof(int) * lst_c);
-	  get_matches(&list_matches, buf, count, lst_m, lst_c);
-	  
+	  char **list_matches = get_matches(buf, count, lst_m, lst_c);
 	}
 
 
@@ -233,7 +232,7 @@ void find_subjects(FILE *in_file)
 }
 
 
-void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m_count)
+char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 {
   
   int i, j, k, p;
@@ -241,6 +240,8 @@ void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m
   int open, close;
   int subjbufsize = 1000;
   char *subjbuf = malloc(sizeof(char) * subjbufsize);;
+
+  char **matches = malloc(sizeof(int) * m_count);
 
   for (j=0; j<m_count; j++)
     {
@@ -256,11 +257,9 @@ void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m
       else if (open_char=='"')
 	close_char = '"';
       
-      //printf("open:%c close:%c\n", open_char, close_char);
-      
       for (i=p, k=0; i<stringlen; i++, k++)
 	{
-	  if (k == subjbufsize)
+	  if (k == subjbufsize-1)
 	    {
 	      subjbuf = realloc(subjbuf, sizeof(char) * (subjbufsize+1000));
 	      if (subjbuf==NULL)
@@ -281,15 +280,11 @@ void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m
 		  subjbuf[k] = string[i];
 		  subjbuf[k+1] = '\0';
 		  
-		  /*
-		  (*matches)[j] = malloc(sizeof(char) * k+1);
+		  matches[j] = malloc(sizeof(char) * (k+1) + 1);
 		  int z;
-		  for (z=0; z<k+1; z++)
-		    (*matches)[j] = subjbuf[z];
-		    
-		  printf("%s\n", (matches)[j]);
-		  */
-
+		  for (z=0; z<=k+1; z++)
+		    matches[j][z] = subjbuf[z];
+		  
 		  subjbuf = realloc(subjbuf, sizeof(char) * 1000);
 		  if (subjbuf==NULL)
 		    {
@@ -306,6 +301,7 @@ void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m
     }
 
   free(subjbuf);  
+  return matches;
 }
 
 
