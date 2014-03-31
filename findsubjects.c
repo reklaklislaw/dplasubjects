@@ -162,15 +162,17 @@ void find_subjects(FILE *in_file)
 {
   int count = 0;
   int buf_size = 1000;
-  char *buf = (char *) malloc(sizeof(char)*buf_size);
+  char *buf = malloc(sizeof(char)*buf_size);
   char c;
+
   char *string_pattern = "\"subject\":\"";
   char *list_pattern = "\"subject\":[";
   char *dict_pattern = "\"subject\":{";
 
-  int str = 0;
-  int lst = 0;
-  int dct = 0;
+  int str_c, lst_c, dct_c;
+  int t_str_c, t_lst_c, t_dct_c;
+  t_str_c = t_lst_c = t_dct_c = 0;
+  int *str_m, *lst_m, *dct_m;
 
   c = getc(in_file);
   while(c != EOF)
@@ -199,45 +201,183 @@ void find_subjects(FILE *in_file)
 	      printf("failed to increase buffer\n");
 	    }
 	}
+
       buf[count] = '\0';
-      //count ++;
-      //printf("%s\n\n\n", buf);      
-      
-      char *string = (char *) malloc(sizeof(char)*count);
-      int i;
-      for (i=0; i<count; i++)
-	string[i] = buf[i];
-      
-      int pos = NULL;
-      pos = boyer_moore(string, count, string_pattern, 11);
-      if (pos != NULL)
+
+      get_match_positions(buf, count, string_pattern, &str_m, &str_c);
+      get_match_positions(buf, count, list_pattern, &lst_m,  &lst_c);
+      get_match_positions(buf, count, dict_pattern, &dct_m, &dct_c);
+
+      if (lst_c > 0)
 	{
-	  printf("string match:%d\n", pos);
-	  str++;
-	}
-      
-      pos = boyer_moore(string, count, list_pattern, 11);
-      if (pos != NULL)
-	{
-	  printf("list match:%d\n", pos);
-	  lst++;
-	}
+	  char **list_matches = malloc(sizeof(int) * lst_c);
+	  get_matches(&list_matches, buf, count, lst_m, lst_c);
 	  
-      pos = boyer_moore(string, count, dict_pattern, 11);
-      if (pos != NULL)
-	{
-	  printf("dict match:%d\n", pos);
-	  dct++;
 	}
-          
+
+
+      t_str_c += str_c;
+      t_lst_c += lst_c;
+      t_dct_c += dct_c;
+
       c = getc(in_file);
       count = 0;
       free(buf);
       buf_size=1000;
-      buf = (char *) malloc(sizeof(char)*buf_size);
+      buf = malloc(sizeof(char)*buf_size);
     }
 
-  printf("strings:%d lists:%d dicts:%d\n", str, lst, dct);
+  printf("strings:%d lists:%d dicts:%d\n", t_str_c, t_lst_c, t_dct_c);
 
   free(buf);
+}
+
+
+void get_matches(char ***matches, char *string, int stringlen, int *m_pos, int m_count)
+{
+  
+  int i, j, k, p;
+  char open_char, close_char;	  
+  int open, close;
+  int subjbufsize = 1000;
+  char *subjbuf = malloc(sizeof(char) * subjbufsize);;
+
+  for (j=0; j<m_count; j++)
+    {
+      
+      open = close = 0;
+      p = m_pos[j];
+      
+      open_char = string[p+10];
+      if (open_char=='[')
+	close_char = ']';
+      else if (open_char=='{')
+	close_char = '}';
+      else if (open_char=='"')
+	close_char = '"';
+      
+      //printf("open:%c close:%c\n", open_char, close_char);
+      
+      for (i=p, k=0; i<stringlen; i++, k++)
+	{
+	  if (k == subjbufsize)
+	    {
+	      subjbuf = realloc(subjbuf, sizeof(char) * (subjbufsize+1000));
+	      if (subjbuf==NULL)
+		{
+		  printf("failed to allocate for subjbuf\n");
+		}
+	      subjbufsize+=1000;
+	    }
+
+	  if (k>=10) 
+	    {
+	      if (string[i] == open_char)
+		open++;
+	      else if (string[i] == close_char)
+		close++;
+	      if(open == close) 
+		{
+		  subjbuf[k] = string[i];
+		  subjbuf[k+1] = '\0';
+		  
+		  /*
+		  (*matches)[j] = malloc(sizeof(char) * k+1);
+		  int z;
+		  for (z=0; z<k+1; z++)
+		    (*matches)[j] = subjbuf[z];
+		    
+		  printf("%s\n", (matches)[j]);
+		  */
+
+		  subjbuf = realloc(subjbuf, sizeof(char) * 1000);
+		  if (subjbuf==NULL)
+		    {
+		      printf("failed to allocate for subjbuf\n");
+		      exit(1);
+		    }
+		  subjbufsize = 1000;
+		  break;
+		} 
+	    }
+
+	  subjbuf[k] = string[i];
+	}            
+    }
+
+  free(subjbuf);  
+}
+
+
+
+
+void get_match_positions(char *string, int stringlen, char *pattern,
+			 int **m_pos, int *m_count)
+{
+
+  *m_count = 0;
+
+  int m_size = 2;
+  *m_pos = malloc(sizeof(int) * m_size);
+  if (*m_pos == NULL)
+    {
+      printf("malloc failed for m_pos\n");
+      exit(1);
+    }
+
+  char *buf;
+  int pos;
+  int start = 0;
+  pos = boyer_moore(string, stringlen, pattern, 11);
+  if (pos != NULL)
+    {
+      //printf("match:%d\n", pos);
+      (*m_pos)[*m_count] = pos;
+      *m_count+=1;
+      if (*m_count == m_size) 
+	{
+	  *m_pos = realloc(*m_pos, sizeof(int) * (*m_count + m_size));
+	  if (*m_pos == NULL)
+	    {
+	      printf("failed to realloc m_pos\n");
+	      exit(1);
+	    }
+	  m_size += *m_count;
+	}
+      
+      while (pos != NULL)
+	{
+	  start = pos + 11;
+	  buf  = malloc(sizeof(char) * 4 + stringlen-start);
+	  int i, j;
+	  for (i=start, j=0; i<stringlen; j++, i++)
+	    {
+	      buf[j] = string[i]; 
+	    }
+	  buf[j+1] = '\0';
+	 	  
+	  pos = boyer_moore(buf, stringlen-start, pattern, 11);
+	  if (pos != NULL)
+	    {
+	      pos += start;
+	      //printf("another list match:%d  m_count:%d\n", pos, *m_count);
+	      
+	      (*m_pos)[*m_count] = pos;
+	      
+	      *m_count+=1;
+	      if (*m_count == m_size) 
+		{
+		  *m_pos = realloc(*m_pos, sizeof(int) * (*m_count + m_size));
+		  if (*m_pos == NULL)
+		    {
+		      printf("failed to realloc m_pos\n");
+		      exit(1);
+		    }
+		  m_size += *m_count;
+		}
+	    } 	    	  
+	  free(buf);
+	}
+    }
+
 }
