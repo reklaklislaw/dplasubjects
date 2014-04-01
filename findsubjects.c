@@ -122,8 +122,8 @@ int boyer_moore (uint8_t *string, uint32_t stringlen, uint8_t *pat, uint32_t pat
     }
     if (j < 0) {
       free(delta2);
-      //printf("pos:%d\n", i+1);
-      return i+1;
+      return i+1; 
+      // return pos of match instead
 	//return (string + i+1);
     }
  
@@ -152,14 +152,22 @@ int main(int argc, char *argv[])
       return 1;
     }
   
-  find_subjects(in_file);
+  FILE *out_file = fopen(out, "w");
+  if (out_file == NULL)
+    {
+      printf("failed to open out_file\n");
+      return 1;
+    }
+
+  find_subjects(in_file, out_file);
 
   fclose(in_file);
+  fclose(out_file);
   return 0;
 }
 
 
-void find_subjects(FILE *in_file)
+void find_subjects(FILE *in_file, FILE *out_file)
 {
   int count = 0;
   int buf_size = 1000;
@@ -174,6 +182,8 @@ void find_subjects(FILE *in_file)
   int t_str_c, t_lst_c, t_dct_c;
   t_str_c = t_lst_c = t_dct_c = 0;
   int *str_m, *lst_m, *dct_m;
+  
+  fputs("[", out_file);
 
   c = getc(in_file);
   while(c != EOF)
@@ -209,12 +219,40 @@ void find_subjects(FILE *in_file)
       get_match_positions(buf, count, list_pattern, &lst_m,  &lst_c);
       get_match_positions(buf, count, dict_pattern, &dct_m, &dct_c);
 
+      char **str_matches, **lst_matches, **dct_matches;
+
+      int i;
+      if (str_c > 0) 
+	{
+	  str_matches = get_matches(buf, count, str_m, str_c);
+	  for (i=0; i<str_c; i++) 
+	    {
+	      fputs("{", out_file);
+	      fputs(str_matches[i], out_file);
+	      fputs("},\n", out_file);
+	    }
+	}
       if (lst_c > 0)
 	{
-	  char **list_matches = get_matches(buf, count, lst_m, lst_c);
+	  lst_matches = get_matches(buf, count, lst_m, lst_c);
+	  for (i=0; i<lst_c; i++) 
+	    {
+	      fputs("{", out_file);
+	      fputs(lst_matches[i], out_file);
+	      fputs("},\n", out_file);
+	    }
 	}
-
-
+      if (dct_c > 0)
+	{
+	  dct_matches = get_matches(buf, count, dct_m, dct_c);
+	  for (i=0; i<dct_c; i++) 
+	    {
+	      fputs("{", out_file);
+	      fputs(dct_matches[i], out_file);
+	      fputs("},\n", out_file);
+	    }
+	}
+     
       t_str_c += str_c;
       t_lst_c += lst_c;
       t_dct_c += dct_c;
@@ -226,6 +264,8 @@ void find_subjects(FILE *in_file)
       buf = malloc(sizeof(char)*buf_size);
     }
 
+  fseek(out_file, -2, SEEK_END);
+  fputs("]", out_file);
   printf("strings:%d lists:%d dicts:%d\n", t_str_c, t_lst_c, t_dct_c);
 
   free(buf);
@@ -237,7 +277,7 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
   
   int i, j, k, p;
   char open_char, close_char;	  
-  int open, close;
+  int open, close, in_quotes;
   int subjbufsize = 1000;
   char *subjbuf = malloc(sizeof(char) * subjbufsize);;
 
@@ -245,7 +285,7 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 
   for (j=0; j<m_count; j++)
     {
-      
+      in_quotes = 0;
       open = close = 0;
       p = m_pos[j];
       
@@ -271,29 +311,41 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 
 	  if (k>=10) 
 	    {
-	      if (string[i] == open_char)
-		open++;
-	      else if (string[i] == close_char)
-		close++;
-	      if(open == close) 
+	      if (string[i] == '"' && string[i-1] != '\\')
 		{
-		  subjbuf[k] = string[i];
-		  subjbuf[k+1] = '\0';
-		  
-		  matches[j] = malloc(sizeof(char) * (k+1) + 1);
-		  int z;
-		  for (z=0; z<=k+1; z++)
-		    matches[j][z] = subjbuf[z];
-		  
-		  subjbuf = realloc(subjbuf, sizeof(char) * 1000);
-		  if (subjbuf==NULL)
+		  if (in_quotes)
+		    in_quotes = 0;
+		  else
+		    in_quotes = 1;
+		}
+		
+	      if (!in_quotes || open_char=='"')
+		{
+
+		  if (string[i] == open_char)
+		    open++;
+		  else if (string[i] == close_char)
+		    close++;
+		  if(open == close) 
 		    {
-		      printf("failed to allocate for subjbuf\n");
-		      exit(1);
-		    }
-		  subjbufsize = 1000;
-		  break;
-		} 
+		      subjbuf[k] = string[i];
+		      subjbuf[k+1] = '\0';
+		  
+		      matches[j] = malloc(sizeof(char) * (k+1) + 1);
+		      int z;
+		      for (z=0; z<=k+1; z++)
+			matches[j][z] = subjbuf[z];
+		  
+		      subjbuf = realloc(subjbuf, sizeof(char) * 1000);
+		      if (subjbuf==NULL)
+			{
+			  printf("failed to allocate for subjbuf\n");
+			  exit(1);
+			}
+		      subjbufsize = 1000;
+		      break;
+		    } 
+		}
 	    }
 
 	  subjbuf[k] = string[i];
@@ -327,7 +379,6 @@ void get_match_positions(char *string, int stringlen, char *pattern,
   pos = boyer_moore(string, stringlen, pattern, 11);
   if (pos != NULL)
     {
-      //printf("match:%d\n", pos);
       (*m_pos)[*m_count] = pos;
       *m_count+=1;
       if (*m_count == m_size) 
@@ -344,7 +395,7 @@ void get_match_positions(char *string, int stringlen, char *pattern,
       while (pos != NULL)
 	{
 	  start = pos + 11;
-	  buf  = malloc(sizeof(char) * 4 + stringlen-start);
+	  buf  = malloc(sizeof(char) * (4 + stringlen-start));
 	  int i, j;
 	  for (i=start, j=0; i<stringlen; j++, i++)
 	    {
@@ -356,8 +407,7 @@ void get_match_positions(char *string, int stringlen, char *pattern,
 	  if (pos != NULL)
 	    {
 	      pos += start;
-	      //printf("another list match:%d  m_count:%d\n", pos, *m_count);
-	      
+	      	      
 	      (*m_pos)[*m_count] = pos;
 	      
 	      *m_count+=1;
