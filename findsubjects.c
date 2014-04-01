@@ -232,6 +232,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
 	      fputs("},\n", out_file);
 	    }
 	}
+
       if (lst_c > 0)
 	{
 	  lst_matches = get_matches(buf, count, lst_m, lst_c);
@@ -252,7 +253,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
 	      fputs("},\n", out_file);
 	    }
 	}
-     
+
       t_str_c += str_c;
       t_lst_c += lst_c;
       t_dct_c += dct_c;
@@ -274,7 +275,6 @@ void find_subjects(FILE *in_file, FILE *out_file)
 
 char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 {
-  
   int i, j, k, p;
   char open_char, close_char;	  
   int open, close, in_quotes;
@@ -308,9 +308,10 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 		}
 	      subjbufsize+=1000;
 	    }
-
+	  
 	  if (k>=10) 
 	    {
+
 	      if (string[i] == '"' && string[i-1] != '\\')
 		{
 		  if (in_quotes)
@@ -321,21 +322,31 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 		
 	      if (!in_quotes || open_char=='"')
 		{
-
-		  if (string[i] == open_char)
-		    open++;
-		  else if (string[i] == close_char)
-		    close++;
+		  if (open_char=='"')
+		    {
+		      if (in_quotes && string[i] == close_char)
+			close++;
+		      else if (!in_quotes && string[i] == open_char)
+			open++;
+		    }
+		  else 
+		    {
+		      if (string[i] == open_char)
+			open++;
+		      else if (string[i] == close_char)
+			close++;
+		    }
+		 
 		  if(open == close) 
 		    {
 		      subjbuf[k] = string[i];
 		      subjbuf[k+1] = '\0';
-		  
+
 		      matches[j] = malloc(sizeof(char) * (k+1) + 1);
 		      int z;
 		      for (z=0; z<=k+1; z++)
 			matches[j][z] = subjbuf[z];
-		  
+
 		      subjbuf = realloc(subjbuf, sizeof(char) * 1000);
 		      if (subjbuf==NULL)
 			{
@@ -343,6 +354,7 @@ char** get_matches(char *string, int stringlen, int *m_pos, int m_count)
 			  exit(1);
 			}
 		      subjbufsize = 1000;
+		      open = close = 0;
 		      break;
 		    } 
 		}
