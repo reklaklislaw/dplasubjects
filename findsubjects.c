@@ -193,7 +193,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
   t_str_c = t_lst_c = t_dct_c = 0;
   int *str_m, *lst_m, *dct_m;
   
-  fputs("[", out_file);
+  fprintf(out_file, "%s", "[");
 
   c = getc(in_file);
   while(c != EOF)
@@ -237,9 +237,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
 	  str_matches = get_matches(buf, count, str_m, str_c);
 	  for (i=0; i<str_c; i++) 
 	    {
-	      fputs("{", out_file);
-	      fputs(str_matches[i], out_file);
-	      fputs("},\n", out_file);
+	      fprintf(out_file, "{%s},\n", str_matches[i]);
 	    }
 	}
 
@@ -248,9 +246,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
 	  lst_matches = get_matches(buf, count, lst_m, lst_c);
 	  for (i=0; i<lst_c; i++) 
 	    {
-	      fputs("{", out_file);
-	      fputs(lst_matches[i], out_file);
-	      fputs("},\n", out_file);
+	      fprintf(out_file, "{%s},\n",lst_matches[i]);
 	    }
 	}
       if (dct_c > 0)
@@ -258,9 +254,7 @@ void find_subjects(FILE *in_file, FILE *out_file)
 	  dct_matches = get_matches(buf, count, dct_m, dct_c);
 	  for (i=0; i<dct_c; i++) 
 	    {
-	      fputs("{", out_file);
-	      fputs(dct_matches[i], out_file);
-	      fputs("},\n", out_file);
+	      fprintf(out_file, "{%s},\n", dct_matches[i]);
 	    }
 	}
 
