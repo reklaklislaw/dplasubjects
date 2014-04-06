@@ -3,6 +3,7 @@
 in_file=$1
 
 echo "getting auth urls"
+IFS=" "
 urls=$(LC_ALL=C grep -o -P "http://id.loc.gov/authorities/subjects/sh[0-9]+" $in_file)
 echo "writing urls"
 echo $urls > authurls
