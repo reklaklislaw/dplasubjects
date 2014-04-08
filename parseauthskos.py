@@ -4,15 +4,20 @@ urlfile = 'authurls'
 subjfile = 'authsubjs'
 
 urls = open(urlfile, 'r')
-urldata = urls.read()
-urllines = urldata.split(' ')
+ul = urls.readlines()
+urllines = []
+for line in ul:
+    if line not in urllines:
+        urllines.append(line)
 
-subjs = open(urlfile, 'r')
+subjs = open(subjfile, 'r')
 subjlines = subjs.readlines()
 
 dct = {}
 for num, subj in enumerate(subjlines):
-    dct[subj] = urllines[num]
-
-with open('authids.json', 'wb') as f:
+    url = urllines[num]
+    sub = subj.lstrip(' ').rstrip(' \n')
+    dct[sub] = url.rstrip('\n')
+    
+with open('authids.json', 'w') as f:
     json.dump(dct, f)
