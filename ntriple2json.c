@@ -6,7 +6,7 @@
 
 void parse(FILE *in_file, FILE *out_file);
 struct ntriple get_next_ntriple(FILE *in_file);
-
+char *get_id(char *subject);
 
 struct ntriple {
   char *subject;
@@ -89,11 +89,11 @@ void parse(FILE *in_file, FILE *out_file)
 	}
 
       nt[ntcount] = get_next_ntriple(in_file);
-      
+      char *id = get_id(nt[ntcount].subject);
 
-      printf("SUBJECT:%s\n", nt[ntcount].subject);
-      printf("PREDICATE:%s\n", nt[ntcount].predicate);
-      printf("OBJECT:%s\n", nt[ntcount].object);      
+      //printf("SUBJECT:%s\n", nt[ntcount].subject);
+      //printf("PREDICATE:%s\n", nt[ntcount].predicate);
+      //printf("OBJECT:%s\n", nt[ntcount].object);      
 
       //free(nt[ntcount].subject);
       //free(nt[ntcount].predicate);
@@ -105,6 +105,49 @@ void parse(FILE *in_file, FILE *out_file)
     }
 
 }
+
+
+char *get_id(char *subject) 
+{
+  char *buf = malloc(100 * sizeof(char));
+  int i = 0;
+  int j = 0;
+  int k = 0;
+  char c;
+  
+  while (1)
+    {
+      c = subject[i];
+      if (c != '>')
+	i++;
+      else
+	break;
+    }
+  
+  int p = i;
+
+  while (1)
+    { 
+      c = subject[i];     
+      if (c != '/')
+	{
+	  buf[i] = c;
+	  i--;
+	  j++;
+	} 
+      else
+	break;
+    }
+
+  char *id = malloc(j * sizeof(char));
+  for (k=0, p=(p-j)+1; k<j-1; k++, p++) {
+    id[k] = buf[p];
+  }
+
+  free(buf);
+  return id;
+}
+
 
 
 struct ntriple get_next_ntriple(FILE *in_file)
