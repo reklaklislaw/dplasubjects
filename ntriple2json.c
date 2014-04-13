@@ -40,17 +40,17 @@ int main(int argc, char *argv[])
 
 
 void parse(FILE *in_file, FILE *out_file)
-{
-  
+{ 
   struct ntriple nt;
   int so_count = 0;
-  int so_size = 1000;
+  int so_size = 6000000;
   struct subjectObject *subjObj = malloc(so_size * sizeof(struct subjectObject));
-  
-  int pos = 0;
-  char c;
-  c = getc(in_file);
-  while (c != EOF) 
+  int hash_size = 1000;
+  int *hashes = malloc(hash_size * sizeof(int));
+  int hash_count = 0;
+  int collisions = 0;
+  int eof = 0;
+  while (1) 
     {
       if (so_count == so_size)
 	{
@@ -62,30 +62,86 @@ void parse(FILE *in_file, FILE *out_file)
 	  so_size += 1000;
 	}
 
-      nt = get_next_ntriple(in_file);
+      nt = get_next_ntriple(in_file, &eof);
       char *id = get_id(nt.subject);
-      
-      int prev_entry = has_entry(subjObj, so_count, id);
-      if (prev_entry)
-	{
-	  add_ntriple_data(&subjObj[prev_entry], nt);
+      if (id=='\0')
+	continue;
+
+      int hash = get_hash(id);
+      //printf("%d %s\n", hash, id);
+      if (subjObj[hash].id != '\0' && strcmp(subjObj[hash].id, id) == 0) 
+	{ 
+	  //printf("adding to hash %d:  id:%s url:%s\n", hash, id, subjObj[hash].url);
+	  add_ntriple_data(&subjObj[hash], nt);
 	}
-      else 
+      else if (subjObj[hash].id == '\0')
 	{	  
-	  alloc_new_entry(&subjObj[so_count]);
-	  subjObj[so_count].id = id;
-	  subjObj[so_count].url = malloc(nt.subjectSize * sizeof(char) + 2);
+	  
+	  if (hash_count == hash_size)
+	    {
+	      hashes = realloc(hashes, (hash_size+1000) * sizeof(int));
+	      if (hashes==NULL)
+		{
+		  printf("failed to realloc hashes\n");
+		  exit(1);
+		}
+	      hash_size += 1000;
+	    }
+	  
+	  hashes[hash_count] = hash;
+	  hash_count += 1;
+
+	  //printf("creating new at hash %d: %s\n", hash, id);
+	  alloc_new_entry(&subjObj[hash]);
+	  subjObj[hash].id = id;
+	  subjObj[hash].url = malloc(nt.subjectSize * sizeof(char) + 2);
 	  int i, j;
 	  for (i=1, j=0; i<nt.subjectSize-1; i++, j++)
-	    subjObj[so_count].url[j] = nt.subject[i];
-	  subjObj[so_count].url[j] = '\0';
-	  add_ntriple_data(&subjObj[so_count], nt);
+	    subjObj[hash].url[j] = nt.subject[i];
+	  subjObj[hash].url[j] = '\0';
+	  //printf("--id:%s  url:%s\n", id, subjObj[hash].url);
+	  add_ntriple_data(&subjObj[hash], nt);
 	  so_count++;
 	}
-      
+
+      free(nt.subject);
+      free(nt.predicate);
+      free(nt.object);
+
+      if (eof)
+	break;
     }
+  
+  int i, h;
+  for (i=0; i<hash_count; i++)
+    {
+      h = hashes[i];
+      if (subjObj[h].id == '\0')
+	continue;
+      else
+	printf("id: %s  url: %s\n", subjObj[h].id, subjObj[h].url);
+    }
+  
+
+}
 
 
+int get_hash(char *id)
+{
+  int i = 0;
+  int j = 2;
+  char *buf = malloc(20 * sizeof(char));
+  while (1)
+    {      
+      buf[i] = id[j];
+      if (id[j] == '\0')
+	break;
+      i++;
+      j++;
+    }
+  
+  int hash = atoi(buf) % 6000000;
+  return hash;
 }
 
 
@@ -102,11 +158,12 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
     {
       if (subjObj->altCount == subjObj->altSize) 
 	{
-	  subjObj->altLabel = realloc(subjObj->altLabel, 
-				      (subjObj->altSize + 10) * sizeof(char));
-	  if (subjObj->altCount==NULL) 
+	  printf("realloc\n");
+	  *subjObj->altLabel = realloc(*subjObj->altLabel, 
+				       (subjObj->altSize + 10) * sizeof(char));
+	  if (*subjObj->altLabel==NULL) 
 	    {
-	      printf("failed to realloc altCount\n");
+	      printf("failed to realloc altLabel\n");
 	      exit(1);
 	    }
 	  subjObj->altSize += 10;
@@ -117,36 +174,16 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
       subjObj->altLabel[subjObj->altCount][j] = '\0';
       subjObj->altCount += 1;
     }
-  
+    
   else if (match_tag(nt.predicate, "narrower")) 
     {
       if (subjObj->narrowerCount == subjObj->narrowerSize) 
 	{
-	  subjObj->narrower = realloc(subjObj->narrower, 
-				      (subjObj->narrowerSize + 10) * sizeof(char));
-	  if (subjObj->narrowerCount==NULL) 
+	  *subjObj->narrower = realloc(*subjObj->narrower, 
+				       (subjObj->narrowerSize + 10) * sizeof(char));
+	  if (*subjObj->narrower==NULL) 
 	    {
-	      printf("failed to realloc narrowerCount\n");
-	      exit(1);
-	    }
-	  subjObj->narrowerSize += 10;
-	}
-      subjObj->narrower[subjObj->narrowerCount] = malloc(nt.objectSize * sizeof(char));
-      for (i=1, j=0; i<nt.objectSize-1; i++, j++)
-	subjObj->narrower[subjObj->narrowerCount][j] = nt.object[i];
-      subjObj->narrower[subjObj->narrowerCount][j] = '\0';
-      subjObj->narrowerCount += 1;
-    }
-
-  else if (match_tag(nt.predicate, "narrower")) 
-    {
-      if (subjObj->narrowerCount == subjObj->narrowerSize) 
-	{
-	  subjObj->narrower = realloc(subjObj->narrower, 
-				      (subjObj->narrowerSize + 10) * sizeof(char));
-	  if (subjObj->narrowerCount==NULL) 
-	    {
-	      printf("failed to realloc narrowerCount\n");
+	      printf("failed to realloc narrower\n");
 	      exit(1);
 	    }
 	  subjObj->narrowerSize += 10;
@@ -162,9 +199,9 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
     {
       if (subjObj->broaderCount == subjObj->broaderSize) 
 	{
-	  subjObj->broader = realloc(subjObj->broader, 
+	  *subjObj->broader = realloc(*subjObj->broader, 
 				      (subjObj->broaderSize + 10) * sizeof(char));
-	  if (subjObj->broaderCount==NULL) 
+	  if (*subjObj->broader==NULL) 
 	    {
 	      printf("failed to realloc broaderCount\n");
 	      exit(1);
@@ -177,16 +214,16 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
       subjObj->broader[subjObj->broaderCount][j] = '\0';
       subjObj->broaderCount += 1;
     }
-
+  
   else if (match_tag(nt.predicate, "closeMatch")) 
     {
       if (subjObj->closeMatchCount == subjObj->closeMatchSize) 
 	{
-	  subjObj->closeMatch = realloc(subjObj->closeMatch, 
-				      (subjObj->closeMatchSize + 10) * sizeof(char));
-	  if (subjObj->closeMatchCount==NULL) 
+	  *subjObj->closeMatch = realloc(*subjObj->closeMatch, 
+					 (subjObj->closeMatchSize + 10) * sizeof(char));
+	  if (subjObj->closeMatch==NULL) 
 	    {
-	      printf("failed to realloc closeMatchCount\n");
+	      printf("failed to realloc closeMatch\n");
 	      exit(1);
 	    }
 	  subjObj->closeMatchSize += 10;
@@ -202,11 +239,11 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
     {
       if (subjObj->relatedCount == subjObj->relatedSize) 
 	{
-	  subjObj->related = realloc(subjObj->related, 
+	  *subjObj->related = realloc(*subjObj->related, 
 				      (subjObj->relatedSize + 10) * sizeof(char));
-	  if (subjObj->relatedCount==NULL) 
+	  if (subjObj->related==NULL) 
 	    {
-	      printf("failed to realloc relatedCount\n");
+	      printf("failed to realloc related\n");
 	      exit(1);
 	    }
 	  subjObj->relatedSize += 10;
@@ -217,13 +254,11 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
       subjObj->related[subjObj->relatedCount][j] = '\0';
       subjObj->relatedCount += 1;
     }
-
-
+  
 }
 
 int match_tag(char *predicate, char *tag)
 {
-
   char *buf = malloc(20 * sizeof(char));
   int t = 0;
   int i, j;
@@ -272,6 +307,7 @@ void alloc_new_entry(struct subjectObject *subjObj)
 
 int has_entry(struct subjectObject *subjObj, int so_count, char *id)
 {
+
   int i;
   for (i=0; i<so_count; i++)
     {
@@ -285,6 +321,8 @@ int has_entry(struct subjectObject *subjObj, int so_count, char *id)
 
 char *get_id(char *subject) 
 {
+  if (subject[0] == '_')
+    return '\0';
   char *buf = malloc(100 * sizeof(char));
   int i = 0;
   int j = 0;
@@ -319,14 +357,14 @@ char *get_id(char *subject)
   for (k=0, p=(p-j)+1; k<j-1; k++, p++) {
     id[k] = buf[p];
   }
-
+  id[k] = '\0';
   free(buf);
   return id;
 }
 
 
 
-struct ntriple get_next_ntriple(FILE *in_file)
+struct ntriple get_next_ntriple(FILE *in_file, int *eof)
 {
   
   int entry_size = 80;
@@ -346,8 +384,8 @@ struct ntriple get_next_ntriple(FILE *in_file)
     { 
       if (counter==entry_size) 
 	{
-	  *ntepointer = realloc(*ntepointer, (entry_size+50) * sizeof(char));
-	  if (ntepointer==NULL)
+	  *ntepointer = realloc(*ntepointer, (entry_size+51) * sizeof(char));
+	  if (*ntepointer==NULL)
 	    {
 	      printf("failed to realloc ntriple entry\n");
 	      exit(1);
@@ -397,12 +435,17 @@ struct ntriple get_next_ntriple(FILE *in_file)
 	nt.predicateSize = s;
 	nt.object[o] = '\0';
 	nt.objectSize = o;
-	while (c!='\n')
-	  c = getc(in_file);
-	break;
+	if (c==EOF) {
+	  *eof = 1;
+	  break;
+	} else {
+	  while (c!='\n')
+	    c = getc(in_file);
+	  break;
+	}
       }      
     }
-    
+
   ntepointer = '\0';
   return nt;
 }

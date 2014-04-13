@@ -33,7 +33,7 @@ struct subjectObject {
 
 
 void parse(FILE *in_file, FILE *out_file);
-struct ntriple get_next_ntriple(FILE *in_file);
+struct ntriple get_next_ntriple(FILE *in_file, int *eof);
 char *get_id(char *subject);
 void alloc_new_entry(struct subjectObject *subjObj);
 void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt);
