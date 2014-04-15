@@ -160,11 +160,11 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  if (buckets[h].subjObj[j].id == '\0')
 	    continue;
 	  else {
-	    printf("%d   id: %s  url: %s  hash:%lu  collisions:%lu \n ", 
-	    	   j, 
-	    	   buckets[h].subjObj[j].id, 
-	    	   buckets[h].subjObj[j].url, 
-	    	   h, collisions[h]);
+	    //printf("%d   id: %s  url: %s  hash:%lu  collisions:%lu \n ", 
+	    // 	   j, 
+	    // 	   buckets[h].subjObj[j].id, 
+	    //	   buckets[h].subjObj[j].url, 
+	    //	   h, collisions[h]);
 	  }
 	}
     }
@@ -181,11 +181,15 @@ size_t get_hash(char *id, int bucket_size)
 {
   const bsize = 32;
   size_t b = 5000000;
+  size_t h;
   while (*id)
     {
       b ^= *id++;
-      
-      b = ((b << 2) | (b >> (bsize - 2)));
+      h = (b << 2); 
+      if (h == 0)
+	b = (b >> (bsize - 2));
+      else
+	b = h;
     }
 
   //printf("hash:%lu\n", b % 300007);
