@@ -30,9 +30,14 @@ struct subjectObject {
   int relatedSize;
 };
 
+struct bucket {
+  struct subjectObject *subjObj;
+  int size;
+  int free;
+};
 
 
-void parse(FILE *in_file, FILE *out_file, int bucket_size);
+void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size);
 struct ntriple get_next_ntriple(FILE *in_file, int *eof);
 char *get_id(char *subject);
 size_t get_hash(char *id, int bucket_size);

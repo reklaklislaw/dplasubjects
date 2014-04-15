@@ -7,7 +7,7 @@
 
 int main(int argc, char *argv[])
 {
-  if (argc!=4) 
+  if (argc!=5) 
     {
       printf("invalid arguments\n");
       exit(1);
@@ -17,7 +17,8 @@ int main(int argc, char *argv[])
   strcpy(in, argv[1]);
   strcpy(out, argv[2]);
 
-  int bucket_size = atoi(argv[3]);
+  int bucket_count = atoi(argv[3]);
+  int bucket_size = atoi(argv[4]);
 
   FILE *in_file = fopen(in, "r");
   if (in_file==NULL) 
@@ -33,7 +34,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
   
-  parse(in_file, out_file, bucket_size);
+  parse(in_file, out_file, bucket_count, bucket_size);
       
   fclose(in_file);
   fclose(out_file);
@@ -41,29 +42,45 @@ int main(int argc, char *argv[])
 }
 
 
-void parse(FILE *in_file, FILE *out_file, int bucket_size)
+void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 { 
   struct ntriple nt;
-  int so_count = 0;
-  int so_size = bucket_size;
-  struct subjectObject *subjObj = malloc(so_size * sizeof(struct subjectObject));
+
+  int b_count = 0;
+  int b_size = bucket_count;
+  struct bucket *buckets = malloc(b_size * sizeof(struct bucket));
+
+  int i;
+  for (i=0; i<bucket_count; i++)
+    {
+      buckets[i].subjObj = malloc(bucket_size * sizeof(struct subjectObject));
+      buckets[i].size = bucket_size;
+      buckets[i].free = bucket_size;
+    }
+
+  //int o_count = 0;
+  //int o_size = bucket_size/10;
+  //struct bucket *overflow = malloc(o_size * sizeof(struct bucket));
+  
   int hash_size = 10000;
   size_t *hashes = malloc(hash_size * sizeof(size_t));
   int hash_count = 0;
-  size_t *collisions = malloc(so_size * sizeof(size_t));
+  size_t *collisions = malloc(bucket_count * sizeof(size_t));
+  int overflow = 0;
+  
   int eof = 0;
   while (1) 
     {
-      if (so_count == so_size)
+      if (b_count == b_size)
 	{
-	  subjObj = realloc(subjObj, (so_size+1000) * sizeof(struct subjectObject));
-	  if (subjObj==NULL) {
+	  printf("realloc\n");
+	  buckets = realloc(buckets, (b_size+1000) * sizeof(struct bucket));
+	  if (buckets==NULL) {
 	    printf("failed to realloc subjObj\n");
 	    exit(1);
 	  }
-	  so_size += 1000;
+	  b_size += 1000;
 	}
-
 
       if (hash_count == hash_size)
 	{
@@ -81,39 +98,45 @@ void parse(FILE *in_file, FILE *out_file, int bucket_size)
       if (id=='\0')
 	continue;
 
-      size_t hash = get_hash(id, bucket_size);
+      size_t hash = get_hash(id, bucket_count);
       //printf("%lu %s\n", hash, id);
       
-      if (subjObj[hash].id != '\0') 
-	{ 
-	  if (strcmp(subjObj[hash].id, id) == 0) 
-	    {
-	      //printf("adding to hash %lu:  id:%s url:%s\n", hash, id, subjObj[hash].url);
-	      add_ntriple_data(&subjObj[hash], nt);
-	    }
-	  else {
-	    //TODO something about collisions
-	    //init_new_entry(&subjObj[p], nt, id);
-	    //add_ntriple_data(&subjObj[p], nt);
-	    //hashes[hash_count] = p;
-	    //hash_count += 1;
-	    collisions[hash] += 1;
-	    //so_count++;
-	  }
-	}
-
-      else
-	{	  
-	  //printf("creating new at hash %d: %s\n", hash, id);
-	  init_new_entry(&subjObj[hash], nt, id);
-	  add_ntriple_data(&subjObj[hash], nt);
+      if (buckets[hash].free == buckets[hash].size) 
+	{
+	  init_new_entry(&buckets[hash].subjObj[0], nt, id);
+	  add_ntriple_data(&buckets[hash].subjObj[0], nt);
+	  buckets[hash].free -= 1;
 	  hashes[hash_count] = hash;
 	  hash_count += 1;
+	  b_count += 1;
 	  collisions[hash] = 0;
-	  so_count++;
 	}
+      
+      else if (buckets[hash].free > 0)
+	{
+	  int next;
+	  int entry = has_entry(buckets[hash], id);
+	  if (entry == -1) {
+	    next = buckets[hash].size - buckets[hash].free;
+	    init_new_entry(&buckets[hash].subjObj[next], nt, id);
+	    buckets[hash].free -= 1;
+	    collisions[hash] += 1;
+	  }
+	  else {
+	    next = entry;
+	  }
 
-
+	  add_ntriple_data(&buckets[hash].subjObj[next], nt);	  
+	  //printf("%s\n", buckets[hash].subjObj[next].id);
+	}
+      
+      else if (buckets[hash].free == 0)
+	{
+	  overflow += 1;
+	  collisions[hash] += 1;
+	  //printf("bucket %lu is full\n", hash);
+	}
+            
       free(nt.subject);
       free(nt.predicate);
       free(nt.object);
@@ -121,35 +144,47 @@ void parse(FILE *in_file, FILE *out_file, int bucket_size)
       if (eof)
 	break;
     }
-
-  int i;
+    
+  
+  int j;
   size_t h;
   float hc = 0.0;
   float cc = 0.0;
   for (i=0; i<hash_count; i++)
     {
       h = hashes[i];
-      if (subjObj[h].id == '\0')
-	continue;
-      else {
-	hc += 1.0;
-	cc += collisions[h];
-	printf("id: %s  url: %s  hash:%lu  collisions:%lu \n ", 
-	       subjObj[h].id, subjObj[h].url, h, collisions[h]);
-      }
+      hc += 1.0;
+      cc += collisions[h];
+      for (j=0; j<buckets[h].size-buckets[h].free; j++) 
+	{
+	  if (buckets[h].subjObj[j].id == '\0')
+	    continue;
+	  else {
+	    printf("%d   id: %s  url: %s  hash:%lu  collisions:%lu \n ", 
+	    	   j, 
+	    	   buckets[h].subjObj[j].id, 
+	    	   buckets[h].subjObj[j].url, 
+	    	   h, collisions[h]);
+	  }
+	}
     }
   
+  printf("hash count: %d\n", hash_count);
   printf("average collisions per hash:%f\n", cc/hc);
+  printf("overflow count:%d\n", overflow);
+  
 
 }
+
 
 size_t get_hash(char *id, int bucket_size)
 {
   const bsize = 32;
-  size_t b = rand() % 5000000;
+  size_t b = 5000000;
   while (*id)
     {
       b ^= *id++;
+      
       b = ((b << 2) | (b >> (bsize - 2)));
     }
 
@@ -331,17 +366,22 @@ void alloc_new_entry(struct subjectObject *subjObj)
 }
 
 
-int has_entry(struct subjectObject *subjObj, int so_count, char *id)
+int has_entry(struct bucket bucket, char *id)
 {
 
   int i;
-  for (i=0; i<so_count; i++)
+  int lim = bucket.size - bucket.free;
+  for (i=0; i<lim; i++)
     {
-      if (strcmp(subjObj[i].id, id) == 0) {
-	return i;
+      if (bucket.subjObj[i].id != '\0') {
+
+	if (strcmp(bucket.subjObj[i].id, id) == 0) {
+	  return i;
+	}
       }
     }
-  return 0;
+  
+  return -1;
 }
 
 
