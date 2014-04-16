@@ -18,6 +18,7 @@ struct subjectObject {
   char *id;
   char *url;
   char *prefLabel;
+  char *language;
   int altCount;
   int altSize;
   int narrowerCount;

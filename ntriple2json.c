@@ -145,8 +145,8 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	break;
     }
     
-  
-  int j;
+  fprintf(out_file, "{");
+  int j, a;
   size_t h;
   float hc = 0.0;
   float cc = 0.0;
@@ -155,16 +155,96 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
       h = hashes[i];
       hc += 1.0;
       cc += collisions[h];
-      for (j=0; j<buckets[h].size-buckets[h].free; j++) 
+      int end = buckets[h].size-buckets[h].free;
+      for (j=0; j<end; j++) 
 	{
 	  if (buckets[h].subjObj[j].id == '\0')
 	    continue;
 	  else {
-	    //printf("%d   id: %s  url: %s  hash:%lu  collisions:%lu \n ", 
-	    // 	   j, 
-	    // 	   buckets[h].subjObj[j].id, 
-	    //	   buckets[h].subjObj[j].url, 
-	    //	   h, collisions[h]);
+	    fprintf(out_file, "\"%s\":{\n", buckets[h].subjObj[j].id);
+	    fprintf(out_file, "\t\"url\":\"%s\",\n", buckets[h].subjObj[j].url);
+	    fprintf(out_file, "\t\"language\":\"%s\",\n", buckets[h].subjObj[j].language);
+	    fprintf(out_file, "\t\"prefLabel\":%s", buckets[h].subjObj[j].prefLabel);
+	    
+	    if (buckets[h].subjObj[j].altCount > 0)
+	      {
+		fprintf(out_file, ",\n\t\"altLabel\":[\n");
+		for (a=0; a<buckets[h].subjObj[j].altCount; a++)
+		  {
+		    fprintf(out_file, "\t\t%s", 
+			    buckets[h].subjObj[j].altLabel[a]);
+		    if (a!=buckets[h].subjObj[j].altCount-1)
+		      fprintf(out_file, ",\n");
+		    else
+		      fprintf(out_file, "]");
+		  }
+	      }
+
+	    /*
+	    if (buckets[h].subjObj[j].relatedCount > 0)
+	      {
+		fprintf(out_file, ",\n\t\"related\":[\n");
+		for (a=0; a<buckets[h].subjObj[j].relatedCount; a++)
+		  {
+		    fprintf(out_file, "\t\t\"%s\"", 
+			    buckets[h].subjObj[j].related[a]);
+		    if (a!=buckets[h].subjObj[j].relatedCount-1)
+		      fprintf(out_file, ",\n");
+		    else
+		      fprintf(out_file, "]");
+		  }
+	      }
+	    */
+
+	    
+	    if (buckets[h].subjObj[j].narrowerCount > 0)
+	      {
+		fprintf(out_file, ",\n\t\"narrower\":[\n");
+		for (a=0; a<buckets[h].subjObj[j].narrowerCount; a++)
+		  {
+		    fprintf(out_file, "\t\t\"%s\"", 
+			    buckets[h].subjObj[j].narrower[a]);
+		    if (a!=buckets[h].subjObj[j].narrowerCount-1)
+		      fprintf(out_file, ",\n");
+		    else
+		      fprintf(out_file, "]");
+		  }
+	      }
+
+	    
+	    if (buckets[h].subjObj[j].broaderCount > 0)
+	      {
+		fprintf(out_file, ",\n\t\"broader\":[\n");
+		for (a=0; a<buckets[h].subjObj[j].broaderCount; a++)
+		  {
+		    fprintf(out_file, "\t\t\"%s\"", 
+			    buckets[h].subjObj[j].broader[a]);
+		    if (a!=buckets[h].subjObj[j].broaderCount-1)
+		      fprintf(out_file, ",\n");
+		    else
+		      fprintf(out_file, "]");
+		  }
+	      }
+
+	    
+	    if (buckets[h].subjObj[j].closeMatchCount > 0)
+	      {
+		fprintf(out_file, ",\n\t\"closeMatch\":[\n");
+		for (a=0; a<buckets[h].subjObj[j].closeMatchCount; a++)
+		  {
+		    fprintf(out_file, "\t\t\"%s\"", 
+			    buckets[h].subjObj[j].closeMatch[a]);
+		    if (a!=buckets[h].subjObj[j].closeMatchCount-1)
+		      fprintf(out_file, ",\n");
+		    else
+		      fprintf(out_file, "]");
+		  }
+	      }
+	    
+	    if (i!=hash_count-1)
+	      fprintf(out_file, "},\n");
+	    else
+	      fprintf(out_file, "}}");
 	  }
 	}
     }
@@ -203,7 +283,20 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
   if (match_tag(nt.predicate, "prefLabel")) 
     {
       subjObj->prefLabel = malloc(nt.objectSize * sizeof(char) + 1);
-      strcpy(subjObj->prefLabel, nt.object);
+      subjObj->language = malloc(4 * sizeof(char));
+      for (i=0; i<nt.objectSize-1; i++)
+	{
+	  if (i == nt.objectSize-4) 
+	    {
+	      subjObj->prefLabel[i] = '\0';
+	      subjObj->language[0] = nt.object[i];
+	      subjObj->language[1] = nt.object[i+1];
+	      subjObj->language[2] = nt.object[i+2];
+	      break;
+	    }
+	  else
+	    subjObj->prefLabel[i] = nt.object[i];
+	}
     }
 
   else if (match_tag(nt.predicate, "altLabel")) 
@@ -219,11 +312,14 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
 	    }
 	  subjObj->altSize += 10;
 	}
-      subjObj->altLabel[subjObj->altCount] = malloc(nt.objectSize * sizeof(char));
-      for (i=1, j=0; i<nt.objectSize-1; i++, j++)
-	subjObj->altLabel[subjObj->altCount][j] = nt.object[i];
-      subjObj->altLabel[subjObj->altCount][j] = '\0';
-      subjObj->altCount += 1;
+      if (nt.object[0] != '_')
+	{
+	  subjObj->altLabel[subjObj->altCount] = malloc(nt.objectSize * sizeof(char));
+	  for (i=0; i<nt.objectSize-4; i++)
+	    subjObj->altLabel[subjObj->altCount][i] = nt.object[i];
+	  subjObj->altLabel[subjObj->altCount][i] = '\0';
+	  subjObj->altCount += 1;
+	}
     }
     
   else if (match_tag(nt.predicate, "narrower")) 
