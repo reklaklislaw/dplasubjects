@@ -61,7 +61,8 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
   //int o_count = 0;
   //int o_size = bucket_size/10;
   //struct bucket *overflow = malloc(o_size * sizeof(struct bucket));
-  
+
+  int id_count = 0;  
   int hash_size = 10000;
   size_t *hashes = malloc(hash_size * sizeof(size_t));
   int hash_count = 0;
@@ -73,7 +74,6 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
     {
       if (b_count == b_size)
 	{
-	  printf("realloc\n");
 	  buckets = realloc(buckets, (b_size+1000) * sizeof(struct bucket));
 	  if (buckets==NULL) {
 	    printf("failed to realloc subjObj\n");
@@ -95,12 +95,12 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  
       nt = get_next_ntriple(in_file, &eof);
       char *id = get_id(nt.subject);
-      if (id=='\0')
-	continue;
-
-      size_t hash = get_hash(id, bucket_count);
-      //printf("%lu %s\n", hash, id);
       
+      if (id=='\0') 
+	continue;
+      
+      size_t hash = get_hash(id, bucket_count);
+            
       if (buckets[hash].free == buckets[hash].size) 
 	{
 	  init_new_entry(&buckets[hash].subjObj[0], nt, id);
@@ -110,6 +110,8 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  hash_count += 1;
 	  b_count += 1;
 	  collisions[hash] = 0;
+	  id_count += 1;
+
 	}
       
       else if (buckets[hash].free > 0)
@@ -121,13 +123,13 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	    init_new_entry(&buckets[hash].subjObj[next], nt, id);
 	    buckets[hash].free -= 1;
 	    collisions[hash] += 1;
+	    id_count += 1;
 	  }
 	  else {
 	    next = entry;
 	  }
 
 	  add_ntriple_data(&buckets[hash].subjObj[next], nt);	  
-	  //printf("%s\n", buckets[hash].subjObj[next].id);
 	}
       
       else if (buckets[hash].free == 0)
@@ -145,11 +147,13 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	break;
     }
     
-  fprintf(out_file, "{");
+
   int j, a;
   size_t h;
   float hc = 0.0;
   float cc = 0.0;
+
+  fprintf(out_file, "{");
   for (i=0; i<hash_count; i++)
     {
       h = hashes[i];
@@ -207,7 +211,6 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 		      fprintf(out_file, "]");
 		  }
 	      }
-
 	    
 	    if (buckets[h].subjObj[j].broaderCount > 0)
 	      {
@@ -245,11 +248,11 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  }
 	}
     }
+
   
-  printf("hash count: %d\n", hash_count);
-  printf("average collisions per hash:%f\n", cc/hc);
-  printf("overflow count:%d\n", overflow);
-  
+  printf(" unique items: %d\n hash count: %d\n average \
+collisions per hash:%f\n overflow count:%d\n", 
+	 id_count, hash_count, cc/hc, overflow);
 
 }
 
@@ -317,7 +320,7 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
 	  subjObj->altCount += 1;
 	}
     }
-    
+
   else if (match_tag(nt.predicate, "narrower")) 
     {
       if (subjObj->narrowerCount == subjObj->narrowerSize) 
@@ -335,9 +338,9 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
       for (i=1, j=0; i<nt.objectSize-1; i++, j++)
 	subjObj->narrower[subjObj->narrowerCount][j] = nt.object[i];
       subjObj->narrower[subjObj->narrowerCount][j] = '\0';
-      subjObj->narrowerCount += 1;
+      subjObj->narrowerCount += 1;      
     }
-
+  
   else if (match_tag(nt.predicate, "broader")) 
     {
       if (subjObj->broaderCount == subjObj->broaderSize) 
@@ -397,19 +400,22 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
       subjObj->related[subjObj->relatedCount][j] = '\0';
       subjObj->relatedCount += 1;
     }
-
+  
 }
 
 int match_tag(char *predicate, char *tag)
 {
+  
   char *buf = malloc(20 * sizeof(char));
   int t = 0;
   int i, j;
   i = j = 0;
   while (1) 
     {
-      if (predicate[i] == '>')
+      if (predicate[i] == '>') {
+	buf[j] = '\0';
 	break;
+      }
       if (predicate[i] == '#')
 	t = 1;
       else if (t) 
@@ -420,7 +426,9 @@ int match_tag(char *predicate, char *tag)
       i++;
     }
 
-  if (strcmp(buf, tag) == 0)
+  int match = strcmp(buf, tag);
+  
+  if (match == 0)
     return 1;
   else
     return 0;
@@ -430,10 +438,10 @@ int match_tag(char *predicate, char *tag)
 
 void init_new_entry(struct subjectObject *subjObj, struct ntriple nt, char *id)
 {
+  subjObj->url = malloc(nt.subjectSize * sizeof(char) + 2);
   alloc_new_entry(subjObj);
   strcpy(subjObj->id, id);
-  subjObj->url = malloc(nt.subjectSize * sizeof(char) + 2);
-  
+    
   int i, j;
   for (i=1, j=0; i<nt.subjectSize-1; i++, j++)
     subjObj->url[j] = nt.subject[i];
