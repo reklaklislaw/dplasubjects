@@ -180,7 +180,6 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 		  }
 	      }
 
-	    /*
 	    if (buckets[h].subjObj[j].relatedCount > 0)
 	      {
 		fprintf(out_file, ",\n\t\"related\":[\n");
@@ -194,8 +193,6 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 		      fprintf(out_file, "]");
 		  }
 	      }
-	    */
-
 	    
 	    if (buckets[h].subjObj[j].narrowerCount > 0)
 	      {
@@ -272,7 +269,6 @@ size_t get_hash(char *id, int bucket_size)
 	b = h;
     }
 
-  //printf("hash:%lu\n", b % 300007);
   return b % bucket_size;
 }
 
@@ -368,7 +364,7 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
 	{
 	  *subjObj->closeMatch = realloc(*subjObj->closeMatch, 
 					 (subjObj->closeMatchSize + 10) * sizeof(char));
-	  if (subjObj->closeMatch==NULL) 
+	  if (*subjObj->closeMatch==NULL) 
 	    {
 	      printf("failed to realloc closeMatch\n");
 	      exit(1);
@@ -388,7 +384,7 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
 	{
 	  *subjObj->related = realloc(*subjObj->related, 
 				      (subjObj->relatedSize + 10) * sizeof(char));
-	  if (subjObj->related==NULL) 
+	  if (*subjObj->related==NULL) 
 	    {
 	      printf("failed to realloc related\n");
 	      exit(1);
@@ -462,7 +458,7 @@ void alloc_new_entry(struct subjectObject *subjObj)
   subjObj->closeMatchCount = 0;
   subjObj->closeMatchSize = size;
   subjObj->relatedCount = 0;
-  subjObj->relatedCount = size;
+  subjObj->relatedSize = size;
 }
 
 
