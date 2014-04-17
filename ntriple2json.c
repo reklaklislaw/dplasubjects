@@ -58,16 +58,21 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
       buckets[i].free = bucket_size;
     }
 
-  //int o_count = 0;
-  //int o_size = bucket_size/10;
-  //struct bucket *overflow = malloc(o_size * sizeof(struct bucket));
+  
+  int overflow_count = 0;
+  int overflow_size = bucket_count/10;
+  struct bucket overflow;
+  overflow.subjObj = malloc(overflow_size * sizeof(struct subjectObject));
+  overflow.size = overflow_size;
+  overflow.free = overflow_size;
+  
 
   int id_count = 0;  
   int hash_size = 10000;
   size_t *hashes = malloc(hash_size * sizeof(size_t));
   int hash_count = 0;
   size_t *collisions = malloc(bucket_count * sizeof(size_t));
-  int overflow = 0;
+  
   
   int eof = 0;
   while (1) 
@@ -111,33 +116,54 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  b_count += 1;
 	  collisions[hash] = 0;
 	  id_count += 1;
+	}
 
-	}
-      
-      else if (buckets[hash].free > 0)
-	{
-	  int next;
-	  int entry = has_entry(buckets[hash], id);
-	  if (entry == -1) {
-	    next = buckets[hash].size - buckets[hash].free;
-	    init_new_entry(&buckets[hash].subjObj[next], nt, id);
-	    buckets[hash].free -= 1;
-	    collisions[hash] += 1;
-	    id_count += 1;
-	  }
-	  else {
-	    next = entry;
+      else {
+	int entry = has_entry(buckets[hash], id);
+
+	if (entry == -1)
+	  {
+	    if (buckets[hash].free > 0)
+	      {
+		entry = buckets[hash].size - buckets[hash].free;
+		init_new_entry(&buckets[hash].subjObj[entry], nt, id);
+		add_ntriple_data(&buckets[hash].subjObj[entry], nt);	  
+		buckets[hash].free -= 1;
+		collisions[hash] += 1;
+		id_count += 1;
+	      }
+	    else
+	      {
+		if (overflow_count == overflow_size) 
+		  {
+		    overflow.subjObj = realloc(overflow.subjObj, 
+					       (overflow_size+(bucket_count/10)) * 
+					       sizeof(struct subjectObject));
+		    if (overflow.subjObj == NULL)
+		      {
+			printf("failed to realloc overflow\n");
+			exit(1);
+		      }
+		    overflow_size += bucket_count/10;
+		  }	  
+
+		entry = has_entry(overflow, id);
+		if (entry == -1 ) {
+		  entry = overflow.size - overflow.free;
+		  init_new_entry(&overflow.subjObj[overflow_count], nt, id);
+		  overflow.free -= 1;
+		  overflow_count += 1;
+		  id_count += 1;
+		} else
+		
+		add_ntriple_data(&overflow.subjObj[entry], nt);
+		collisions[hash] += 1;
+	      }
 	  }
 
-	  add_ntriple_data(&buckets[hash].subjObj[next], nt);	  
-	}
-      
-      else if (buckets[hash].free == 0)
-	{
-	  overflow += 1;
-	  collisions[hash] += 1;
-	  //printf("bucket %lu is full\n", hash);
-	}
+	else if (entry != -1)
+	  add_ntriple_data(&buckets[hash].subjObj[entry], nt);	  
+      }
             
       free(nt.subject);
       free(nt.predicate);
@@ -147,8 +173,21 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	break;
     }
     
+  write_json(out_file, buckets, 
+	     hashes, hash_count, 
+	     collisions, overflow, 
+	     overflow_count, id_count);
+  
+}
 
-  int j, a;
+
+void write_json(FILE *out_file, struct bucket *buckets, 
+		size_t *hashes, int hash_count,
+		size_t *collisions, struct bucket overflow,
+		int overflow_count, int id_count)
+{
+
+  int i, j;
   size_t h;
   float hc = 0.0;
   float cc = 0.0;
@@ -165,96 +204,122 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 	  if (buckets[h].subjObj[j].id == '\0')
 	    continue;
 	  else {
-	    fprintf(out_file, "\"%s\":{\n", buckets[h].subjObj[j].id);
-	    fprintf(out_file, "\t\"url\":\"%s\",\n", buckets[h].subjObj[j].url);
-	    fprintf(out_file, "\t\"language\":\"%s\",\n", buckets[h].subjObj[j].language);
-	    fprintf(out_file, "\t\"prefLabel\":%s", buckets[h].subjObj[j].prefLabel);
-	    
-	    if (buckets[h].subjObj[j].altCount > 0)
-	      {
-		fprintf(out_file, ",\n\t\"altLabel\":[\n");
-		for (a=0; a<buckets[h].subjObj[j].altCount; a++)
-		  {
-		    fprintf(out_file, "\t\t%s", 
-			    buckets[h].subjObj[j].altLabel[a]);
-		    if (a!=buckets[h].subjObj[j].altCount-1)
-		      fprintf(out_file, ",\n");
-		    else
-		      fprintf(out_file, "]");
-		  }
-	      }
+	    write_entry(out_file, buckets[h].subjObj[j]);
 
-	    if (buckets[h].subjObj[j].relatedCount > 0)
-	      {
-		fprintf(out_file, ",\n\t\"related\":[\n");
-		for (a=0; a<buckets[h].subjObj[j].relatedCount; a++)
-		  {
-		    fprintf(out_file, "\t\t\"%s\"", 
-			    buckets[h].subjObj[j].related[a]);
-		    if (a!=buckets[h].subjObj[j].relatedCount-1)
-		      fprintf(out_file, ",\n");
-		    else
-		      fprintf(out_file, "]");
-		  }
-	      }
-	    
-	    if (buckets[h].subjObj[j].narrowerCount > 0)
-	      {
-		fprintf(out_file, ",\n\t\"narrower\":[\n");
-		for (a=0; a<buckets[h].subjObj[j].narrowerCount; a++)
-		  {
-		    fprintf(out_file, "\t\t\"%s\"", 
-			    buckets[h].subjObj[j].narrower[a]);
-		    if (a!=buckets[h].subjObj[j].narrowerCount-1)
-		      fprintf(out_file, ",\n");
-		    else
-		      fprintf(out_file, "]");
-		  }
-	      }
-	    
-	    if (buckets[h].subjObj[j].broaderCount > 0)
-	      {
-		fprintf(out_file, ",\n\t\"broader\":[\n");
-		for (a=0; a<buckets[h].subjObj[j].broaderCount; a++)
-		  {
-		    fprintf(out_file, "\t\t\"%s\"", 
-			    buckets[h].subjObj[j].broader[a]);
-		    if (a!=buckets[h].subjObj[j].broaderCount-1)
-		      fprintf(out_file, ",\n");
-		    else
-		      fprintf(out_file, "]");
-		  }
-	      }
-
-	    
-	    if (buckets[h].subjObj[j].closeMatchCount > 0)
-	      {
-		fprintf(out_file, ",\n\t\"closeMatch\":[\n");
-		for (a=0; a<buckets[h].subjObj[j].closeMatchCount; a++)
-		  {
-		    fprintf(out_file, "\t\t\"%s\"", 
-			    buckets[h].subjObj[j].closeMatch[a]);
-		    if (a!=buckets[h].subjObj[j].closeMatchCount-1)
-		      fprintf(out_file, ",\n");
-		    else
-		      fprintf(out_file, "]");
-		  }
-	      }
-	    
 	    if (i!=hash_count-1)
 	      fprintf(out_file, "},\n");
-	    else
-	      fprintf(out_file, "}}");
+	    else 
+	      if (overflow_count==0) 
+		fprintf(out_file, "}}");	    	  
 	  }
 	}
     }
-
   
+  for (i=0; i<overflow_count; i++)
+    {
+      if (overflow.subjObj[i].id == '\0')
+	continue;
+      else {
+	write_entry(out_file, overflow.subjObj[i]);
+	if (i != overflow_count-1)
+	  fprintf(out_file, "},\n");
+	else
+	  fprintf(out_file, "}}");	    
+      }
+    }
+
   printf(" unique items: %d\n hash count: %d\n average \
 collisions per hash:%f\n overflow count:%d\n", 
-	 id_count, hash_count, cc/hc, overflow);
+	 id_count, hash_count, cc/hc, overflow_count);
+
 
 }
+
+
+void write_entry(FILE *out_file, struct subjectObject subjObj)
+{
+
+  
+  fprintf(out_file, "\"%s\":{\n", subjObj.id);
+  fprintf(out_file, "\t\"url\":\"%s\",\n", subjObj.url);
+  fprintf(out_file, "\t\"language\":\"%s\",\n", subjObj.language);
+  fprintf(out_file, "\t\"prefLabel\":%s", subjObj.prefLabel);
+
+  int a;
+  if (subjObj.altCount > 0)
+    {
+      fprintf(out_file, ",\n\t\"altLabel\":[\n");
+      for (a=0; a<subjObj.altCount; a++)
+	{
+	  fprintf(out_file, "\t\t%s", 
+		  subjObj.altLabel[a]);
+	  if (a!=subjObj.altCount-1)
+	    fprintf(out_file, ",\n");
+	  else
+	    fprintf(out_file, "]");
+	}
+    }
+  
+  if (subjObj.relatedCount > 0)
+    {
+      fprintf(out_file, ",\n\t\"related\":[\n");
+      for (a=0; a<subjObj.relatedCount; a++)
+	{
+	  fprintf(out_file, "\t\t\"%s\"", 
+		  subjObj.related[a]);
+	  if (a!=subjObj.relatedCount-1)
+	    fprintf(out_file, ",\n");
+	  else
+	    fprintf(out_file, "]");
+	}
+    }
+  
+  if (subjObj.narrowerCount > 0)
+    {
+      fprintf(out_file, ",\n\t\"narrower\":[\n");
+      for (a=0; a<subjObj.narrowerCount; a++)
+	{
+	  fprintf(out_file, "\t\t\"%s\"", 
+		  subjObj.narrower[a]);
+	  if (a!=subjObj.narrowerCount-1)
+	    fprintf(out_file, ",\n");
+	  else
+	    fprintf(out_file, "]");
+	}
+    }
+  
+  if (subjObj.broaderCount > 0)
+    {
+      fprintf(out_file, ",\n\t\"broader\":[\n");
+      for (a=0; a<subjObj.broaderCount; a++)
+	{
+	  fprintf(out_file, "\t\t\"%s\"", 
+		  subjObj.broader[a]);
+	  if (a!=subjObj.broaderCount-1)
+	    fprintf(out_file, ",\n");
+	  else
+	    fprintf(out_file, "]");
+	}
+    }
+  
+  if (subjObj.closeMatchCount > 0)
+    {
+      fprintf(out_file, ",\n\t\"closeMatch\":[\n");
+      for (a=0; a<subjObj.closeMatchCount; a++)
+	{
+	  fprintf(out_file, "\t\t\"%s\"", 
+		  subjObj.closeMatch[a]);
+	  if (a!=subjObj.closeMatchCount-1)
+	    fprintf(out_file, ",\n");
+	  else
+	    fprintf(out_file, "]");
+	}
+    }
+}
+
+
+
+
 
 
 size_t get_hash(char *id, int bucket_size)

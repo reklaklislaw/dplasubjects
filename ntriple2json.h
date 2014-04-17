@@ -38,11 +38,39 @@ struct bucket {
 };
 
 
-void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size);
-struct ntriple get_next_ntriple(FILE *in_file, int *eof);
+void parse(FILE *in_file, 
+	   FILE *out_file, 
+	   int bucket_count, 
+	   int bucket_size);
+
+void write_json(FILE *out_file, 
+		struct bucket *buckets, 
+		size_t *hashes, 
+		int hash_count,
+		size_t *collisions,
+		struct bucket overflow,
+		int overflow_count, 
+		int id_count);
+
+void write_entry(FILE *out_file, 
+		 struct subjectObject subjObj);
+
+struct ntriple get_next_ntriple(FILE *in_file, 
+				int *eof);
+
 char *get_id(char *subject);
-size_t get_hash(char *id, int bucket_size);
-void init_new_entry(struct subjectObject *subjObj, struct ntriple nt, char *id);
+
+size_t get_hash(char *id, 
+		int bucket_size);
+
+void init_new_entry(struct subjectObject *subjObj, 
+		    struct ntriple nt, 
+		    char *id);
+
 void alloc_new_entry(struct subjectObject *subjObj);
-void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt);
-int match_tag(char *predicate, char *tag);
+
+void add_ntriple_data(struct subjectObject *subjObj, 
+		      struct ntriple nt);
+
+int match_tag(char *predicate, 
+	      char *tag);
