@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "boyermoore.c"
-#include "ntriple2json.h"
+#include "skosntriple2json.h"
 
 int main(int argc, char *argv[])
 {
