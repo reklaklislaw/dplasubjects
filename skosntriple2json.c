@@ -68,11 +68,10 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
   
 
   int id_count = 0;  
-  int hash_size = 10000;
+  int hash_size = bucket_count/10;
   size_t *hashes = malloc(hash_size * sizeof(size_t));
   int hash_count = 0;
   size_t *collisions = malloc(bucket_count * sizeof(size_t));
-  
   
   int eof = 0;
   while (1) 
@@ -89,21 +88,21 @@ void parse(FILE *in_file, FILE *out_file, int bucket_count, int bucket_size)
 
       if (hash_count == hash_size)
 	{
-	  hashes = realloc(hashes, (hash_size+10000) * sizeof(size_t));
+	  hashes = realloc(hashes, (hash_size+(bucket_count/10)) * sizeof(size_t));
 	  if (hashes==NULL)
 	    {
 	      printf("failed to realloc hashes\n");
 	      exit(1);
 	    }
-	  hash_size += 10000;
+	  hash_size += bucket_count/10;
 	}
 	  
       nt = get_next_ntriple(in_file, &eof);
       char *id = get_id(nt.subject);
       
-      if (id=='\0') 
+      if (id=='\0')
 	continue;
-      
+
       size_t hash = get_hash(id, bucket_count);
             
       if (buckets[hash].free == buckets[hash].size) 
@@ -318,10 +317,6 @@ void write_entry(FILE *out_file, struct subjectObject subjObj)
 }
 
 
-
-
-
-
 size_t get_hash(char *id, int bucket_size)
 {
   const bsize = 32;
@@ -399,7 +394,7 @@ void add_ntriple_data(struct subjectObject *subjObj, struct ntriple nt)
 	    }
 	  subjObj->narrowerSize += 10;
 	}
-      subjObj->narrower[subjObj->narrowerCount] = malloc(nt.objectSize * sizeof(char));
+      subjObj->narrower[subjObj->narrowerCount] = malloc(nt.objectSize * sizeof(char));  
       for (i=1, j=0; i<nt.objectSize-1; i++, j++)
 	subjObj->narrower[subjObj->narrowerCount][j] = nt.object[i];
       subjObj->narrower[subjObj->narrowerCount][j] = '\0';
@@ -517,11 +512,11 @@ void alloc_new_entry(struct subjectObject *subjObj)
 {
   int size = 25;
   subjObj->id = malloc(size * sizeof(char));
-  subjObj->altLabel = malloc(size * sizeof(char));
-  subjObj->narrower = malloc(size * sizeof(char));
-  subjObj->broader = malloc(size * sizeof(char));
-  subjObj->closeMatch = malloc(size * sizeof(char));
-  subjObj->related = malloc(size * sizeof(char));
+  subjObj->altLabel = malloc(size * sizeof(char*));
+  subjObj->narrower = malloc(size * sizeof(char*));
+  subjObj->broader = malloc(size * sizeof(char*));
+  subjObj->closeMatch = malloc(size * sizeof(char*));
+  subjObj->related = malloc(size * sizeof(char*));
   subjObj->altCount = 0;
   subjObj->altSize = size;
   subjObj->narrowerCount = 0;
