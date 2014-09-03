@@ -1,3 +1,5 @@
+#Takes subject JSON created by findsubjects.c and writes a pickled set (eliminates duplicates) to a file.
+
 import json, pickle
 import sys
 

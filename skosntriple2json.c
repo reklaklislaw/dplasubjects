@@ -1,3 +1,7 @@
+/* Takes SKOS N-Triple metadata and reformats as JSON
+ */
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -9,7 +13,7 @@ int main(int argc, char *argv[])
 {
   if (argc!=5) 
     {
-      printf("invalid arguments\n");
+      printf("Usage: in_file out_file bucket_count bucket_size\n");
       exit(1);
     }
   

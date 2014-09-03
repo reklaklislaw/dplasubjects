@@ -1,3 +1,6 @@
+/* Takes in JSON metadata, pulls all "subject" entries, and writes them to a file as JSON.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -20,7 +23,7 @@ int main(int argc, char *argv[])
 {
   if (argc!=3)
     {
-      printf("invalid number of args\n");
+      printf("Usage: in_file out_file\n");
       return 1;
     }
 

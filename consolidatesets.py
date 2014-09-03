@@ -1,3 +1,6 @@
+# Takes pickled set of subject metadata and consolidates subject strings that 
+# contain multiple entries
+
 import pickle
 import glob
 import sys
