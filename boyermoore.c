@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include "boyermoore.h"
 
 #define ALPHABET_LEN 256
 #define NOT_FOUND patlen

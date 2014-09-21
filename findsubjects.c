@@ -276,7 +276,7 @@ void get_match_positions(char *string, int stringlen, char *pattern,
   int pos;
   int start = 0;
   pos = boyer_moore(string, stringlen, pattern, 11);
-  if (pos != NULL)
+  if (pos)
     {
       (*m_pos)[*m_count] = pos;
       *m_count+=1;
@@ -291,7 +291,7 @@ void get_match_positions(char *string, int stringlen, char *pattern,
 	  m_size += *m_count;
 	}
       
-      while (pos != NULL)
+      while (pos)
 	{
 	  start = pos + 11;
 	  buf  = malloc(sizeof(char) * (4 + stringlen-start));
@@ -303,7 +303,7 @@ void get_match_positions(char *string, int stringlen, char *pattern,
 	  buf[j+1] = '\0';
 	 	  
 	  pos = boyer_moore(buf, stringlen-start, pattern, 11);
-	  if (pos != NULL)
+	  if (pos)
 	    {
 	      pos += start;
 	      	      
