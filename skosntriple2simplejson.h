@@ -10,25 +10,9 @@ struct ntriple {
 
 
 struct subjectObject {
-  char **altLabel;
-  char **narrower;
-  char **broader;
-  char **closeMatch;  
-  char **related;
   char *id;
-  char *url;
+  char *uri;
   char *prefLabel;
-  char *language;
-  int altCount;
-  int altSize;
-  int narrowerCount;
-  int narrowerSize;
-  int broaderCount;
-  int broaderSize;
-  int closeMatchCount;
-  int closeMatchSize;
-  int relatedCount;
-  int relatedSize;
 };
 
 struct bucket {
@@ -45,12 +29,14 @@ void parse(FILE *in_file,
 
 void write_json(FILE *out_file, 
 		struct bucket *buckets, 
-		size_t *hashes, 
+		int32_t *hashes, 
 		int hash_count,
-		size_t *collisions,
+		int32_t *collisions,
 		struct bucket overflow,
 		int overflow_count, 
 		int id_count);
+
+int has_entry(struct bucket bucket, char *id);
 
 void write_entry(FILE *out_file, 
 		 struct subjectObject subjObj);
@@ -59,6 +45,10 @@ struct ntriple get_next_ntriple(FILE *in_file,
 				int *eof);
 
 char *get_id(char *subject);
+
+int32_t jch(char *key, int32_t num_buckets);
+
+uint64_t get_ll_id(char *id);
 
 size_t get_hash(char *id, 
 		int bucket_size);
