@@ -112,13 +112,13 @@ void make_delta2(int *delta2, uint8_t *pat, int32_t patlen) {
   }
 }
  
-int boyer_moore (uint8_t *string, uint32_t stringlen, uint8_t *pat, uint32_t patlen) {
+int boyer_moore (uint8_t *string, uint32_t start, uint32_t stringlen, uint8_t *pat, uint32_t patlen) {
   int i;
   int delta1[ALPHABET_LEN];
   int *delta2 = (int *)malloc(patlen * sizeof(int));
   make_delta1(delta1, pat, patlen);
   make_delta2(delta2, pat, patlen);
-  i = patlen-1;
+  i = start + (patlen-1);
   while (i < stringlen) {
     int j = patlen-1;
     while (j >= 0 && (string[i] == pat[j])) {
@@ -135,5 +135,5 @@ int boyer_moore (uint8_t *string, uint32_t stringlen, uint8_t *pat, uint32_t pat
     i += max(delta1[string[i]], delta2[j]);
   }
   free(delta2);
-  return NULL;
+  return -1;
 }

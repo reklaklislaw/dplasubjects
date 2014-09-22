@@ -16,6 +16,7 @@ void make_delta2(int *delta2,
 		 int32_t patlen);
 
 int boyer_moore(uint8_t *string, 
+		uint32_t start,
 		uint32_t stringlen, 
 		uint8_t *pat, 
 		uint32_t patlen);
