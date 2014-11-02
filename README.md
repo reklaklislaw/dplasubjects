@@ -1,5 +1,9 @@
-dplasubjects
+metadata2ontology
 ============
 
-some scripts regarding dpla's [hacking ideas](http://dp.la/info/developers/ideas-and-projects/current-ideas/) #4 ("Respect My Authority!")
+A tool for mapping fields from metadata to ontologies.
+
+Current limitations:
+	* metadata must be JSON, with each item line-separated.
+	* ontology must be SKOS Ntriple, which each item line-separated
 
