@@ -1,19 +1,9 @@
 
+struct find_field_args {
+  struct ioargs *ioargs;
+  char *search_field;
+  char *id_field;
+};
 
-void find_field(FILE *in_file, 
-		char *search_field, 
-		char *id_field, 
-		FILE *out_file);
+void *find_field(void *args);
 
-char** get_matches(char *string, 
-		   int stringlen, 
-		   int *m_pos, 
-		   int m_count, 
-		   char *pattern, 
-		   int **depth);
-
-void get_match_positions(char *string, 
-			 int stringlen, 
-			 char *pattern,
-			 int **m_pos, 
-			 int *m_count);

@@ -5,472 +5,304 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
-#include "boyermoore.c"
+#include "pthread.h"
+
+#include "fileaccess.c"
+#include "filesearch.c"
 #include "findfield.h"
+
+
 
 int main(int argc, char *argv[])
 {
-  if (argc!=7)
+  if (argc!=5)
     {
-      printf("Usage: in_file start_byte end_byte search_field id_field out_file\n");
+      fprintf(stderr, "Usage: in_file search_field id_field out_basename\n");
       return 1;
     }
   
-  char *in, *out;
-  int in_len = strlen(argv[1]), out_len = strlen(argv[6]);
+  char *in, *outbase;
+  int in_len = strlen(argv[1]), out_len = strlen(argv[4]);
   
-  in = (char *) malloc((in_len + 1) * sizeof(char));
+  in = malloc((in_len + 1) * sizeof(char));
   if (!in)
     {
-      printf("failed to alloc 'in'\n");
-      exit(1);
+      fprintf(stderr, "failed to alloc 'in'\n");
+      return 1;
     }
-  out = (char *) malloc((out_len + 1) * sizeof(char));
-  if (!out) 
+
+  out_len += 1;
+  outbase = malloc(out_len * sizeof(char));
+  if (!outbase) 
     {
-      printf("failed to alloc 'out'\n");
-      exit(1);
+      fprintf(stderr, "failed to alloc 'outbase'\n");
+      return 1;
     }
 
   strcpy(in, argv[1]);
-  strcpy(out, argv[6]);
+  strcpy(outbase, argv[4]);
   
-  int start_byte, end_byte;
-  start_byte = atoi(argv[2]);
-  end_byte = atoi(argv[3]);
-
   char *search_field, *id_field;
-  int sf_len = strlen(argv[4]), idf_len = strlen(argv[5]);
+  int sf_len = strlen(argv[2]), idf_len = strlen(argv[3]);
   search_field = (char *) malloc((sf_len + 1)  * sizeof(char));
   if (!search_field)
     {
-      printf("failed to alloc 'search_field'\n");
-      exit(1);
+      fprintf(stderr, "failed to alloc 'search_field'\n");
+      return 1;
     }
   id_field = (char *) malloc((idf_len + 1)  * sizeof(char));
   if (!id_field)
     {
-      printf("failed to alloc 'id_field'\n");
-      exit(1);
-    }
-
-  strcpy(search_field, argv[4]);
-  strcpy(id_field, argv[5]);
-
-  FILE *in_file = fopen(in, "r");
-  if (!in_file)
-    {
-      printf("failed to open in_file\n");
-      return 1;
-    }
-  
-  //get chunk here
-
-
-  FILE *out_file = fopen(out, "w");
-  if (!out_file)
-    {
-      printf("failed to open out_file\n");
+      fprintf(stderr, "failed to alloc 'id_field'\n");
       return 1;
     }
 
-  find_field(in_file, search_field, id_field, out_file);
+  strcpy(search_field, argv[2]);
+  strcpy(id_field, argv[3]);
+
+  fprintf(stderr, "building indexes for %s...", in);
+  struct chunks *chunks = NULL;
+  struct indexes *indexes = NULL;
+
+  if (!build_indexes(in, &indexes, &chunks, -1))
+    {
+      fprintf(stderr, "failed to build indexes\n");
+      return 1;
+    }
+
+  fprintf(stderr, "done.\n");  
   
+  char **out_files = malloc(sizeof(char *) * NUMCORES);
+  if (!out_files)
+    {
+      fprintf(stderr, "failed to alloc out files\n");
+      return 1;
+    }
+
+  pthread_t *threads = malloc(sizeof(pthread_t) * NUMCORES);
+  if (!threads)
+    {
+      fprintf(stderr, "failed to alloc threads\n");
+      return 1;
+    }
+  int *pt_ret = malloc(sizeof(int) * NUMCORES);
+  if (!pt_ret)
+    {
+      fprintf(stderr, "failed to alloc pt_ret\n");
+      return 1;
+    }
+
+  struct find_field_args **args = malloc(sizeof(struct find_field_args *) * NUMCORES);
+  if (!args)
+    {
+      fprintf(stderr, "failed to allocate args\n");
+      return 1;
+    }
+
+  char corestr[3];
+  int i, j;
+  for (i=0; i<NUMCORES; i++)
+    {
+      sprintf(corestr, "%d", i);
+      out_files[i] = malloc(sizeof(char) * (out_len + strlen(corestr) + 1));
+      if (!out_files[i])
+	{
+	  fprintf(stderr, "failed to alloc out file");
+	  return 1;
+	}
+
+      strcpy(out_files[i], outbase);
+      strcat(out_files[i], corestr);
+
+      args[i] = malloc(sizeof(struct find_field_args));
+      args[i]->ioargs = malloc(sizeof(struct ioargs));
+      args[i]->ioargs->in_file = in;
+      args[i]->ioargs->out_file = out_files[i];
+      args[i]->ioargs->chunk = &chunks[i];
+      args[i]->search_field = search_field;
+      args[i]->id_field = id_field;
+
+      int mb = args[i]->ioargs->chunk->size / (1024*1024);
+      fprintf(stderr, "creating new thread[%d] to process %dMB of data\n", i, mb);
+      pt_ret[i] = pthread_create(&threads[i], NULL, find_field, (void *) args[i]);
+    }
+  
+  for (i=0; i<NUMCORES; i++) 
+    {
+      pthread_join(threads[i], NULL);
+      fprintf(stderr, "thread[%d] returned with status %d\n", i, pt_ret[i]);
+      free(out_files[i]);
+      free(args[i]->ioargs);
+      free(args[i]);
+      free_line_positions(chunks[i].lp);
+    }
+
+  if (indexes) 
+    {
+      free_index(indexes->index);
+      free_line_positions(indexes->lp);
+      free(indexes);
+    }
+
+  free(chunks);
+  free(out_files);
+  free(args);
   free(in);
-  free(out);
+  free(outbase);
   free(search_field);
   free(id_field);
+  free(pt_ret);
+  free(threads);
 
-  fclose(in_file);
-  fclose(out_file);
-
-  return 0;
+  return 0; 
 }
-
-
-struct search_patterns {
-  char *search_string_pattern;
-  char *search_list_pattern;
-  char *search_dict_pattern;
-  char *id_pattern;
-};
-
 
 struct search_patterns get_search_patterns(char *search_field, char *id_field)
 {
-  struct search_patterns p;
+  struct search_patterns sp;
+  sp.pcount = 0;
+  sp.match_count = 0;
 
-  p.search_string_pattern = (char *) malloc((5 + strlen(search_field)) * sizeof(char));
-  if (!p.search_string_pattern)
-    {
-      printf("failed to alloc 'search_string_pattern'\n");
-      exit(1);
-    }
-  strcpy(p.search_string_pattern, "\"");
-  strcat(p.search_string_pattern, search_field);
-  strcat(p.search_string_pattern, "\":\"");
-
-  p.search_list_pattern = (char *) malloc((5 + strlen(search_field)) * sizeof(char));
-  if (!p.search_list_pattern)
-    {
-      printf("failed to alloc 'search_list_pattern'\n");
-      exit(1);
-    }
-  strcpy(p.search_list_pattern, "\"");
-  strcat(p.search_list_pattern, search_field);
-  strcat(p.search_list_pattern, "\":[");
-
-  p.search_dict_pattern = (char *) malloc((5 + strlen(search_field)) * sizeof(char));
-  if (!p.search_dict_pattern)
-    {
-      printf("failed to alloc 'search_dict_pattern'\n");
-      exit(1);
-    }
-  strcpy(p.search_dict_pattern, "\"");
-  strcat(p.search_dict_pattern, search_field);
-  strcat(p.search_dict_pattern, "\":{");
-
-  p.id_pattern = (char *) malloc((5 + strlen(id_field)) * sizeof(char));
-  if (!p.id_pattern)
-    {
-      printf("failed to alloc 'id_pattern'\n");
-      exit(1);
-    }
-  strcpy(p.id_pattern, "\"");
-  strcat(p.id_pattern, id_field);
-  strcat(p.id_pattern, "\":\"");
-
-  return p;
+  add_search_pattern(&sp, "\"", id_field, "\": \"", "id"); 
+  add_search_pattern(&sp, "\"", search_field, "\": \"", "string"); 
+  add_search_pattern(&sp, "\"", search_field, "\": [", "list");
+  add_search_pattern(&sp, "\"", search_field, "\": {", "dict");
+  
+  return sp;
 }
 
 
-void find_field(FILE *in_file, char *search_field, char *id_field, FILE *out_file)
+void *find_field(void *ptr)
 {
-  int count = 0;
-  int buf_size = 1000;
-  char *buf = malloc(sizeof(char)*buf_size);
-  if (!buf)
+
+  struct find_field_args *args;
+  args = (struct find_field_args *) ptr;
+
+  FILE *in_file = fopen(args->ioargs->in_file, "r");
+  if (!in_file)
     {
-      printf("Failed to malloc buf\n");
-      exit(1);
+      fprintf(stderr, "failed to open %s for reading\n", args->ioargs->in_file);
+      return NULL;
     }
-  char c;
 
-  struct search_patterns p = get_search_patterns(search_field, id_field);
-
-  int id_c, s_str_c, s_lst_c, s_dct_c;
-  int total_s_str_c, total_s_lst_c, total_s_dct_c;
-  total_s_str_c = total_s_lst_c = total_s_dct_c = 0;
-  int *id_m, *s_str_m, *s_lst_m, *s_dct_m;
+  fprintf(stderr, "opening %s for writing...\n", args->ioargs->out_file);
   
-  fprintf(out_file, "%s", "[");
-
-  c = getc(in_file);
-  while(c != EOF)
+  FILE *out_file = fopen(args->ioargs->out_file, "w");
+  if (!out_file)
     {
-      
-      //get next line
-      while(c != '\n' && c != EOF)
+      fprintf(stderr, "failed to open %s for reading\n", args->ioargs->out_file);
+      return NULL;
+    }
+
+  struct search_patterns *sp = malloc(sizeof(struct search_patterns));
+  *sp = get_search_patterns(args->search_field, args->id_field);
+  
+  int i, pos = 0, consumed = 0;
+  char *line = NULL;
+  char *input_buffer = malloc(sizeof(char) * CHUNK);
+  if (!input_buffer)
+    {
+      fprintf(stderr, "failed to alloc input buffer\n");
+      return NULL;
+    }
+
+  fprintf(out_file, "%s", "[");  
+  while(1)
+    {
+
+      line = get_next_line(&input_buffer, &consumed, &pos, in_file, args->ioargs);
+      if (!line)
+	break;
+
+      int count = strlen(line);
+      int p, m = 0;
+      for (p=0; p<sp->pcount; p++) 
 	{
-	  c = getc(in_file);
-	  buf[count] = c;
-	  count++;
-	  if (count == buf_size)
+	  get_match_positions(line, count, &sp->patterns[p]);	  
+	  if (sp->patterns[p].match_count > 0 )
 	    {
-	      buf = realloc(buf, sizeof(char)*(buf_size+1000));
-	      if (!buf)
+	      if (strcmp(sp->patterns[p].type, "id")!=0) 
 		{
-		  printf("failed to increase buffer\n");
-		}
-	      buf_size += 1000;
-	    }
-	}
-      buf[count] = '\0';
-
-      get_match_positions(buf, count, p.id_pattern, &id_m, &id_c);
-      get_match_positions(buf, count, p.search_string_pattern, &s_str_m, &s_str_c);
-      get_match_positions(buf, count, p.search_list_pattern, &s_lst_m,  &s_lst_c);
-      get_match_positions(buf, count, p.search_dict_pattern, &s_dct_m, &s_dct_c);
-
-      char **id_matches, **s_str_matches, **s_lst_matches, **s_dct_matches;
-      int *id_depth, *s_depth;
-      
-      int i, j=0, t = s_str_c +s_lst_c +s_dct_c;
-      char e;
-      if (s_str_c > 0 || s_lst_c > 0 || s_dct_c > 0)
-	{
-	  id_depth = (int *) malloc(sizeof(int) * id_c);
-	  id_matches = get_matches(buf, count, id_m, id_c, p.id_pattern, &id_depth);
-	  for (i=0; i<id_c; i++) 
-	    {
-	      if (id_depth[i] == 1)
-		fprintf(out_file, "{\"identifier\":{%s}", id_matches[i]);
-	      free(id_matches[i]);
-	    }
-	  
-	  free(id_depth);
-	  free(id_matches);
-	  free(id_m);
-
-	  fprintf(out_file, "%s", ",\"fields\":[");
- 	  
-	  if (s_str_c > 0) 
-	    {
-	      s_depth = (int *) malloc(sizeof(int) * s_str_c);
-	      s_str_matches = get_matches(buf, count, s_str_m, s_str_c, 
-					  p.search_string_pattern, &s_depth);
-	      for (i=0; i<s_str_c; i++, j++) 
-		{
-		  if (j<t-1)
-		    e = ',';
-		  else
-		    e = ']';
-		  fprintf(out_file, "{%s}%c", s_str_matches[i], e);
-		  free(s_str_matches[i]);
-		}
-
-	      free(s_str_matches);
-	      free(s_depth);
-	      free(s_str_m);
-	    }
-
-	  if (s_lst_c > 0)
-	    {
-	      s_depth = (int *) malloc(sizeof(int) * s_lst_c);
-	      s_lst_matches = get_matches(buf, count, s_lst_m, s_lst_c, 
-					  p.search_list_pattern, &s_depth);
-	      for (i=0; i<s_lst_c; i++, j++) 
-		{
-		  if (j<t-1)
-		    e = ',';
-		  else
-		    e = ']';
-		  fprintf(out_file, "{%s}%c", s_lst_matches[i], e);
-		  free(s_lst_matches[i]);
+		  m += sp->patterns[p].match_count;
+		  sp->match_count += sp->patterns[p].match_count;
 		}
 	      
-	      free(s_lst_matches);
-	      free(s_depth);
-	      free(s_lst_m);
+	      get_matches(line, count, &sp->patterns[p]);
 	    }
-	  
-	  if (s_dct_c > 0)
-	    {
-	      s_depth = (int *) malloc(sizeof(int) * s_dct_c);
-	      s_dct_matches = get_matches(buf, count, s_dct_m, s_dct_c, 
-					  p.search_dict_pattern, &s_depth);
-	      for (i=0; i<s_dct_c; i++, j++) 
-		{
-		  if (j<t-1)
-		    e = ',';
-		  else
-		    e = ']';
-		  fprintf(out_file, "{%s}%c", s_dct_matches[i], e);
-		  free(s_dct_matches[i]);
-		}
+	}             
 
-	      free(s_dct_matches);
-	      free(s_depth);
-	      free(s_dct_m);
-	    }
-	  
-	  fprintf(out_file, "%s", "},\n");
-	}
+      if (m > 0)
+	fprintf(out_file, "{");
 
-      total_s_str_c += s_str_c;
-      total_s_lst_c += s_lst_c;
-      total_s_dct_c += s_dct_c;
-
-      c = getc(in_file);
-      count = 0;
-      id_c = s_str_c = s_lst_c = s_dct_c = 0;
-
-      buf_size=1000;
-      buf = realloc(buf, sizeof(char)*buf_size);
-      if (!buf)
+      int l;
+      for (p=0; p<sp->pcount; p++) 
 	{
-	  printf("failed to realloc buf\n");
-	  exit(1);
+	  if (strcmp(sp->patterns[p].type, "id")==0 && m > 0) 
+	    {
+	      fprintf(out_file, "\"identifier\":");
+	      for (l=0; l<sp->patterns[p].match_count; l++)
+		{
+		  if (sp->patterns[p].matches[l].depth == 1)
+		    fprintf(out_file, "%s,", sp->patterns[p].matches[l].string);
+		}
+	    }
 	}
-      
-    }
 
+      if (m>0)
+	fprintf(out_file, "\"fields\":[");
+      
+      int t = 1;
+      for (p=0; p<sp->pcount; p++) 
+	{
+	  if (strcmp(sp->patterns[p].type, "id")!=0 && m > 0) 
+	    {	
+	      for (l=0; l<sp->patterns[p].match_count; l++)
+		if (sp->patterns[p].matches[l].string) 
+		  {
+		    fprintf(out_file, "%s", sp->patterns[p].matches[l].string);
+		    if (t==m)
+		      fprintf(out_file, "]");
+		    else
+		      fprintf(out_file, ",");
+		    t++;
+		  } 
+	    }
+	  
+	  for (l=0; l<sp->patterns[p].match_count; l++)
+	    if (sp->patterns[p].matches[l].string)
+	      {
+		free(sp->patterns[p].matches[l].string);
+		sp->patterns[p].matches[l].string = NULL;
+	      }
+	  free(sp->patterns[p].matches);
+	  sp->patterns[p].matches = NULL;
+	}
+
+      if (m > 0)
+	fprintf(out_file, "},\n");
+
+      free(line);
+      line = NULL;
+    }	
+  
   fseek(out_file, -2, SEEK_END);
   fprintf(out_file, "%s", "]");
-
-  printf("\nstrings:%d lists:%d dicts:%d\n", total_s_str_c, total_s_lst_c, total_s_dct_c);
-
-  free(buf);
-  free(p.id_pattern);
-  free(p.search_string_pattern);
-  free(p.search_list_pattern);
-  free(p.search_dict_pattern);
   
-}
+  fclose(in_file);
+  fclose(out_file);
 
-
-char** get_matches(char *string, int stringlen, int *m_pos, int m_count, char *pattern, int **depth)
-{
-  int i, j, k, p;
-  char open_char, close_char;	  
-  int open, close, in_quotes;
-  int subjbufsize = 1000;
-  char *subjbuf = malloc(sizeof(char) * subjbufsize);
-  if (!subjbuf)
+  for (i=0; i<sp->pcount; i++)
     {
-      printf("Failed to malloc subjbuf\n");
-      exit(1);
+      if (strcmp(sp->patterns[i].type, "id")!=0)
+	fprintf(stderr,"%s matches: %d\n", sp->patterns[i].type, sp->patterns[i].total_match_count);
+      free(sp->patterns[i].string);
+      free(sp->patterns[i].name);
+      free(sp->patterns[i].type);
     }
 
-  char **matches = (char **) malloc(sizeof(int *) * m_count);
-  if (!matches)
-    {
-      printf("Failed to malloc matches\n");
-      exit(1);
-    }
-
-  for (j=0; j<m_count; j++)
-    {
-
-      (*depth)[j] = 0;
-
-      in_quotes = 0;
-      open = close = 0;
-      p = m_pos[j];
-      open_char = string[p+(strlen(pattern)-1)];
-      if (open_char=='[')
-	close_char = ']';
-      else if (open_char=='{')
-	close_char = '}';
-      else if (open_char=='"')
-	close_char = '"';
-      
-      for (i=0; i<stringlen; i++) {
-	if (string[i] == '{') 
-	  (*depth)[j]+=1;
-	else if (string[i] == '}')
-	  (*depth)[j]-=1;
-	if (i == p) 
-	  break;
-      }
-   
-      for (i=p, k=0; i<stringlen; i++, k++)
-	{
-	  if (k == subjbufsize-1)
-	    {
-	      subjbuf = realloc(subjbuf, sizeof(char) * (subjbufsize+1000));
-	      if (!subjbuf)
-		{
-		  printf("failed to allocate for subjbuf\n");
-		}
-	      subjbufsize+=1000;
-	    }
- 
-	  if (k>=strlen(pattern)-1) 
-	    {
-	      if (string[i] == '"' && 
-		  (string[i-1] != '\\' || (string[i-1] == '\\' && 
-					   string[i-2] == '\\')))
-		{
-		  if (in_quotes)
-		    in_quotes = 0;
-		  else
-		    in_quotes = 1;
-		}
-		
-	      if (!in_quotes || open_char=='"')
-		{
-		  if (open_char=='"' && 
-		      (string[i-1] != '\\' || (string[i-1] == '\\' && 
-					       string[i-2] == '\\')))
-		    {
-		      if (in_quotes && string[i] == close_char)
-			close++;
-		      else if (!in_quotes && string[i] == open_char)
-			open++;
-		    }
-		  else if (open_char!='"')
-		    {
-		      if (string[i] == open_char)
-			open++;
-		      else if (string[i] == close_char)
-			close++;
-		    }
-		 
-		  if(open == close) 
-		    {
-		      subjbuf[k] = string[i];
-		      matches[j] = malloc(sizeof(char) * (k+2));
-		      if (!matches[j])
-			{
-			  printf("Failed to malloc matches[j]\n");
-			  exit(1);
-			}
-		      strncpy(matches[j], subjbuf, k+1);		      
-		      matches[j][k+1] = '\0';
-		      subjbuf = realloc(subjbuf, sizeof(char) * 1000);
-		      if (!subjbuf)
-			{
-			  printf("failed to allocate for subjbuf\n");
-			  exit(1);
-			}
-		      subjbufsize = 1000;
-		      open = close = 0;
-		      in_quotes = 0;
-		      break;
-		    } 
-		}
-	    }
-
-	  subjbuf[k] = string[i];
-	}            
-      
-    }
-
-  free(subjbuf); 
-  return matches;
-}
-
-
-
-
-void get_match_positions(char *string, int stringlen, char *pattern,
-			 int **m_pos, int *m_count)
-{
-
-  *m_count = 0;
-  int m_size = 10;
-  *m_pos = (int *) malloc(sizeof(int) * m_size);
-  if (!*m_pos)
-    {
-      printf("malloc failed for m_pos\n");
-      exit(1);
-    }
-
-  int pos = -1;
-  int start = 0;
-  while (1)    
-    {
-       
-      pos = boyer_moore(string, start, stringlen, pattern, strlen(pattern));
-      
-      if (pos == -1)
-	break;
-      
-      start = pos + strlen(pattern);
-
-      (*m_pos)[*m_count] = pos;
-      *m_count+=1;
-      if (*m_count == m_size) 
-	{
-	  *m_pos = realloc(*m_pos, sizeof(int) * (*m_count + m_size));
-	  if (!*m_pos)
-	    {
-	      printf("failed to realloc m_pos\n");
-	      exit(1);
-	    }
-	  m_size += *m_count;
-	}
-    }
-
+  fprintf(stderr, "total matches: %d\n\n", sp->match_count);
+  free(sp->patterns);
+  free(sp);
+  free(input_buffer);
+  
 }
